@@ -41,7 +41,7 @@ export default function MyTickets() {
     load()
   }, [user?.uid])
 
-  const getEventForReg = (reg) => events.find((e) => e.id === reg.eventId)
+  const getEventForReg = (reg) => reg.event || events.find((e) => e.id === reg.eventId)
 
   const handleDownloadQR = (regId, eventTitle) => {
     const svg = document.getElementById(`qr-${regId}`)

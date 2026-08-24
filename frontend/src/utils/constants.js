@@ -14,16 +14,17 @@ export const EVENT_STATUS = {
   OPEN: 'OPEN',
   CLOSED: 'CLOSED',
   COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
 }
 
 export const APPROVAL_STATUS = {
-  PENDING: 'pending',
-  APPROVED: 'approved',
-  REJECTED: 'rejected',
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
 }
 
 export const SUPER_ADMIN_EMAIL =
-  import.meta.env.VITE_SUPER_ADMIN_EMAIL || '[Insert Your Email Here]'
+  import.meta.env.VITE_SUPER_ADMIN_EMAIL || 'cdasarath2006@gmail.com'
 
 export const EVENT_MODE = {
   OFFLINE: 'OFFLINE',

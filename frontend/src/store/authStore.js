@@ -11,7 +11,7 @@ const useAuthStore = create((set) => ({
     set({
       user,
       isAuthenticated: !!user,
-      isSuperAdmin: user?.role === 'super-admin',
+      isSuperAdmin: user?.role === 'super-admin' || user?.role === 'SUPER_ADMIN',
       loading: false,
     }),
 

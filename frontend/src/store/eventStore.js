@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 
-// Normalize Firestore Timestamp fields to ISO strings
 const normalizeEvent = (event) => ({
   ...event,
   createdAt: event.createdAt?.toDate
@@ -15,6 +14,7 @@ const normalizeEvent = (event) => ({
   registrationDeadline: event.registrationDeadline?.toDate
     ? event.registrationDeadline.toDate().toISOString()
     : event.registrationDeadline,
+  tags: Array.isArray(event.tags) ? event.tags : [],
 })
 
 const useEventStore = create((set, get) => ({
@@ -26,22 +26,23 @@ const useEventStore = create((set, get) => ({
   activeFilter: 'all',
 
   setEvents: (events) => {
-    const normalized = events.map(normalizeEvent)
+    const normalized = (Array.isArray(events) ? events : []).map(normalizeEvent)
     set({ events: normalized, filteredEvents: normalized })
   },
 
-  setSelectedEvent: (event) => set({ selectedEvent: event }),
+  setSelectedEvent: (event) => set({ selectedEvent: event ? normalizeEvent(event) : null }),
 
   setSearchQuery: (query) => {
     const { events, activeFilter } = get()
+    const safeQuery = (query || '').toLowerCase()
     const filtered = events.filter((e) => {
       const matchesSearch =
-        e.title.toLowerCase().includes(query.toLowerCase()) ||
-        e.organizer.toLowerCase().includes(query.toLowerCase()) ||
-        e.tags.some((t) => t.toLowerCase().includes(query.toLowerCase()))
+        (e.title || '').toLowerCase().includes(safeQuery) ||
+        (e.organizer || '').toLowerCase().includes(safeQuery) ||
+        (e.tags || []).some((t) => (t || '').toLowerCase().includes(safeQuery))
       const matchesFilter =
         activeFilter === 'all' ||
-        e.type.toLowerCase() === activeFilter.toLowerCase()
+        (e.type || '').toLowerCase() === activeFilter.toLowerCase()
       return matchesSearch && matchesFilter
     })
     set({ searchQuery: query, filteredEvents: filtered })
@@ -51,23 +52,27 @@ const useEventStore = create((set, get) => ({
 
   setActiveFilter: (filter) => {
     const { events, searchQuery } = get()
+    const safeQuery = (searchQuery || '').toLowerCase()
     const filtered = events.filter((e) => {
       const matchesFilter =
-        filter === 'all' || e.type.toLowerCase() === filter.toLowerCase()
+        filter === 'all' || (e.type || '').toLowerCase() === filter.toLowerCase()
       const matchesSearch =
-        !searchQuery ||
-        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.organizer.toLowerCase().includes(searchQuery.toLowerCase())
+        !safeQuery ||
+        (e.title || '').toLowerCase().includes(safeQuery) ||
+        (e.organizer || '').toLowerCase().includes(safeQuery) ||
+        (e.tags || []).some((t) => (t || '').toLowerCase().includes(safeQuery))
       return matchesFilter && matchesSearch
     })
     set({ activeFilter: filter, filteredEvents: filtered })
   },
 
-  addEvent: (event) =>
+  addEvent: (event) => {
+    const normalized = normalizeEvent(event)
     set((state) => ({
-      events: [event, ...state.events],
-      filteredEvents: [event, ...state.filteredEvents],
-    })),
+      events: [normalized, ...state.events],
+      filteredEvents: [normalized, ...state.filteredEvents],
+    }))
+  },
 
   updateEvent: (id, updates) =>
     set((state) => ({

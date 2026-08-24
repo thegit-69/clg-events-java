@@ -1,18 +1,15 @@
-import {
-  signInWithPopup,
-  GoogleAuthProvider,
-  signOut,
-  onAuthStateChanged,
-} from 'firebase/auth'
-import { auth } from './firebase'
+import { authClient } from './authClient'
 import { SUPER_ADMIN_EMAIL } from '../utils/constants'
 
-const googleProvider = new GoogleAuthProvider()
+let cachedToken = null
 
 export const signInWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider)
-    return result.user
+    const data = await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: window.location.origin,
+    })
+    return data
   } catch (error) {
     console.error('Google sign-in error:', error)
     throw error
@@ -21,15 +18,32 @@ export const signInWithGoogle = async () => {
 
 export const logOut = async () => {
   try {
-    await signOut(auth)
+    cachedToken = null
+    await authClient.signOut()
   } catch (error) {
     console.error('Sign out error:', error)
     throw error
   }
 }
 
-export const onAuthChange = (callback) => {
-  return onAuthStateChanged(auth, callback)
+export const getAuthToken = async () => {
+  try {
+    if (cachedToken) return cachedToken
+    if (typeof authClient.token === 'function') {
+      const result = await authClient.token()
+      if (result?.data?.token) {
+        cachedToken = result.data.token
+        return result.data.token
+      }
+    }
+  } catch (e) {
+    console.warn('Could not retrieve raw JWT token from Neon Auth client:', e)
+  }
+  return cachedToken
+}
+
+export const setAuthToken = (token) => {
+  cachedToken = token
 }
 
 export const getUserRole = (email) => {
@@ -37,4 +51,39 @@ export const getUserRole = (email) => {
   return email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
     ? 'super-admin'
     : 'organizer'
+}
+
+export const onAuthChange = (callback) => {
+  let isMounted = true
+
+  const checkSession = async () => {
+    try {
+      const session = await authClient.getSession()
+      if (!isMounted) return
+
+      if (session?.data?.user) {
+        const rawUser = session.data.user
+        const role = getUserRole(rawUser.email)
+        const user = {
+          uid: rawUser.id || rawUser.sub,
+          id: rawUser.id || rawUser.sub,
+          email: rawUser.email,
+          displayName: rawUser.name || rawUser.displayName,
+          photoURL: rawUser.image || rawUser.photoUrl,
+          role,
+        }
+        callback(user)
+      } else {
+        callback(null)
+      }
+    } catch (err) {
+      if (isMounted) callback(null)
+    }
+  }
+
+  checkSession()
+
+  return () => {
+    isMounted = false
+  }
 }

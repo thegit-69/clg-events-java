@@ -1,45 +1,20 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  where,
-  serverTimestamp,
-  limit,
-  onSnapshot,
-} from 'firebase/firestore'
-import { auth, db } from './firebase'
-import { APPROVAL_STATUS } from '../utils/constants'
+import api from './api'
+import { subscribeToEventAttendance } from './websocket'
 
-const EVENTS_COLLECTION = 'events'
-const REGISTRATIONS_COLLECTION = 'registrations'
+// ==========================================
+// 1. Events API
+// ==========================================
 
-// Events
-export const fetchApprovedEvents = async () => {
+export const fetchApprovedEvents = async (params = {}) => {
   try {
-    const q = query(
-      collection(db, EVENTS_COLLECTION),
-      where('approvalStatus', '==', APPROVAL_STATUS.APPROVED),
-      orderBy('createdAt', 'desc')
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-  } catch (error) {
-    // Fallback if index isn't ready
-    if (error.code === 'failed-precondition') {
-      console.warn('Index missing — fetching approved events without order.')
-      const q = query(
-        collection(db, EVENTS_COLLECTION),
-        where('approvalStatus', '==', APPROVAL_STATUS.APPROVED)
-      )
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const data = await api.get('/events', { params })
+    // If backend returns Page<EventResponseDto>, extract content
+    if (data && Array.isArray(data.content)) {
+      return data.content
     }
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('Error fetching approved events:', error)
     throw error
   }
 }
@@ -48,89 +23,109 @@ export const fetchApprovedEvents = async () => {
 export const fetchEvents = fetchApprovedEvents
 
 export const fetchEventById = async (id) => {
-  const docRef = doc(db, EVENTS_COLLECTION, id)
-  const snapshot = await getDoc(docRef)
-  if (snapshot.exists()) {
-    return { id: snapshot.id, ...snapshot.data() }
+  try {
+    const data = await api.get(`/events/${id}`)
+    return data
+  } catch (error) {
+    console.error(`Error fetching event ${id}:`, error)
+    return null
   }
-  return null
 }
 
 export const createEvent = async (eventData) => {
-  const docRef = await addDoc(collection(db, EVENTS_COLLECTION), {
-    ...eventData,
-    approvalStatus: eventData.approvalStatus || APPROVAL_STATUS.PENDING,
-    reviewedBy: null,
-    reviewedAt: null,
-    rejectionReason: null,
-    submittedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
-    registeredCount: 0,
-  })
-  return docRef.id
-}
-
-export const fetchMyProposals = async (uid) => {
-  if (!uid) return []
-
   try {
-    const q = query(
-      collection(db, EVENTS_COLLECTION),
-      where('createdBy', '==', uid),
-      orderBy('createdAt', 'desc')
-    )
-    const snapshot = await getDocs(q)
-    if (!snapshot.empty) {
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const payload = {
+      title: eventData.title,
+      type: eventData.type,
+      mode: eventData.mode || 'OFFLINE',
+      description: eventData.description,
+      venue: eventData.venue,
+      banner: eventData.banner || eventData.bannerUrl,
+      startDate: eventData.startDate ? new Date(eventData.startDate).toISOString() : new Date().toISOString(),
+      endDate: eventData.endDate ? new Date(eventData.endDate).toISOString() : new Date().toISOString(),
+      registrationDeadline: eventData.registrationDeadline ? new Date(eventData.registrationDeadline).toISOString() : null,
+      maxParticipants: eventData.maxParticipants ? parseInt(eventData.maxParticipants, 10) : 100,
+      tags: eventData.tags || [],
     }
-
-    const legacyQ = query(
-      collection(db, EVENTS_COLLECTION),
-      where('organizerId', '==', uid)
-    )
-    const legacySnapshot = await getDocs(legacyQ)
-    return legacySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const created = await api.post('/events', payload)
+    return created?.id || created
   } catch (error) {
-    if (error.code === 'failed-precondition') {
-      const q = query(
-        collection(db, EVENTS_COLLECTION),
-        where('createdBy', '==', uid)
-      )
-      const snapshot = await getDocs(q)
-      if (!snapshot.empty) {
-        return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-      }
-
-      const legacyQ = query(
-        collection(db, EVENTS_COLLECTION),
-        where('organizerId', '==', uid)
-      )
-      const legacySnapshot = await getDocs(legacyQ)
-      return legacySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-    }
+    console.error('Error creating event:', error)
     throw error
   }
 }
 
+export const updateEvent = async (id, updates) => {
+  try {
+    const payload = {
+      title: updates.title,
+      type: updates.type,
+      mode: updates.mode,
+      description: updates.description,
+      venue: updates.venue,
+      banner: updates.banner || updates.bannerUrl,
+      startDate: updates.startDate ? new Date(updates.startDate).toISOString() : undefined,
+      endDate: updates.endDate ? new Date(updates.endDate).toISOString() : undefined,
+      registrationDeadline: updates.registrationDeadline ? new Date(updates.registrationDeadline).toISOString() : undefined,
+      maxParticipants: updates.maxParticipants ? parseInt(updates.maxParticipants, 10) : undefined,
+      tags: updates.tags,
+    }
+    return await api.put(`/events/${id}`, payload)
+  } catch (error) {
+    console.error(`Error updating event ${id}:`, error)
+    throw error
+  }
+}
+
+export const deleteEvent = async (id) => {
+  try {
+    return await api.delete(`/events/${id}`)
+  } catch (error) {
+    console.error(`Error deleting event ${id}:`, error)
+    throw error
+  }
+}
+
+export const fetchMyProposals = async (uid) => {
+  try {
+    const data = await api.get('/events/my-proposals')
+    return Array.isArray(data) ? data : []
+  } catch (error) {
+    console.error('Error fetching proposals:', error)
+    return []
+  }
+}
+
+export const fetchDashboardStats = async () => {
+  try {
+    const data = await api.get('/events/dashboard-stats')
+    return data || { totalEvents: 0, totalRegistrations: 0, pendingEvents: 0, approvedEvents: 0 }
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error)
+    return { totalEvents: 0, totalRegistrations: 0, pendingEvents: 0, approvedEvents: 0 }
+  }
+}
+
+export const resubmitEventProposal = async (eventId) => {
+  try {
+    return await api.post(`/events/${eventId}/resubmit`)
+  } catch (error) {
+    console.error(`Error resubmitting event ${eventId}:`, error)
+    throw error
+  }
+}
+
+// ==========================================
+// 2. Admin Review API
+// ==========================================
+
 export const fetchPendingEventsForAdmin = async () => {
   try {
-    const q = query(
-      collection(db, EVENTS_COLLECTION),
-      where('approvalStatus', '==', APPROVAL_STATUS.PENDING),
-      orderBy('createdAt', 'desc')
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const data = await api.get('/admin/pending-events')
+    return Array.isArray(data) ? data : []
   } catch (error) {
-    if (error.code === 'failed-precondition') {
-      const q = query(
-        collection(db, EVENTS_COLLECTION),
-        where('approvalStatus', '==', APPROVAL_STATUS.PENDING)
-      )
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-    }
-    throw error
+    console.error('Error fetching pending admin events:', error)
+    return []
   }
 }
 
@@ -140,176 +135,165 @@ export const reviewEventProposal = async ({
   reviewerUid,
   rejectionReason,
 }) => {
-  const docRef = doc(db, EVENTS_COLLECTION, eventId)
-  await updateDoc(docRef, {
-    approvalStatus: nextStatus,
-    reviewedBy: reviewerUid || null,
-    reviewedAt: serverTimestamp(),
-    rejectionReason:
-      nextStatus === APPROVAL_STATUS.REJECTED
-        ? rejectionReason || 'No reason provided'
-        : null,
-  })
+  try {
+    const status = String(nextStatus).toUpperCase()
+    return await api.put(`/admin/events/${eventId}/review`, {
+      status,
+      rejectionReason: status === 'REJECTED' ? rejectionReason : null,
+    })
+  } catch (error) {
+    console.error(`Error reviewing event ${eventId}:`, error)
+    throw error
+  }
 }
 
-export const resubmitEventProposal = async (eventId) => {
-  const docRef = doc(db, EVENTS_COLLECTION, eventId)
-  await updateDoc(docRef, {
-    approvalStatus: APPROVAL_STATUS.PENDING,
-    resubmittedAt: serverTimestamp(),
-    reviewedBy: null,
-    reviewedAt: null,
-    rejectionReason: null,
-  })
-}
+// ==========================================
+// 3. Registrations & Attendance API
+// ==========================================
 
-export const updateEvent = async (id, updates) => {
-  const docRef = doc(db, EVENTS_COLLECTION, id)
-  await updateDoc(docRef, updates)
-}
-
-export const deleteEvent = async (id) => {
-  await deleteDoc(doc(db, EVENTS_COLLECTION, id))
-}
-
-// Registrations
 export const registerForEvent = async (eventId, currentUser) => {
-  const authUser = auth.currentUser
-  if (!authUser?.uid) {
-    throw new Error('Not authenticated')
-  }
-
-  const registrationData = {
-    uid: authUser.uid,
-    eventId,
-    attended: false,
-    registeredAt: new Date(),
-  }
-
-  if (authUser.displayName || currentUser?.displayName) {
-    registrationData.displayName = authUser.displayName || currentUser.displayName
-  }
-
-  if (authUser.email || currentUser?.email) {
-    registrationData.email = authUser.email || currentUser.email
-  }
-
-  const docRef = await addDoc(collection(db, REGISTRATIONS_COLLECTION), registrationData)
-  return docRef.id
-}
-
-export const checkUserAttendance = async (eventId, userId) => {
   try {
-    const q = query(
-      collection(db, REGISTRATIONS_COLLECTION),
-      where('eventId', '==', eventId),
-      where('uid', '==', userId),
-      limit(1)
-    )
-    const snapshot = await getDocs(q)
-    if (snapshot.empty) return false
-    return snapshot.docs[0].data().attended || false
-  } catch (error) {
-    console.error('Error checking attendance:', error)
-    return false
-  }
-}
-
-export const subscribeUserAttendance = (eventId, userId, onChange, onError) => {
-  if (!eventId || !userId) {
-    if (typeof onChange === 'function') onChange(false)
-    return () => { }
-  }
-
-  const q = query(
-    collection(db, REGISTRATIONS_COLLECTION),
-    where('eventId', '==', eventId),
-    where('uid', '==', userId),
-    limit(1)
-  )
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      if (snapshot.empty) {
-        if (typeof onChange === 'function') onChange(false)
-        return
-      }
-
-      const hasAttended = snapshot.docs[0].data().attended || false
-      if (typeof onChange === 'function') onChange(hasAttended)
-    },
-    (error) => {
-      console.error('Error listening for attendance updates:', error)
-      if (typeof onError === 'function') onError(error)
+    const payload = {
+      displayName: currentUser?.displayName || null,
+      email: currentUser?.email || null,
     }
-  )
+    const ticket = await api.post(`/events/${eventId}/register`, payload)
+    return ticket?.id || ticket
+  } catch (error) {
+    console.error(`Error registering for event ${eventId}:`, error)
+    throw error
+  }
 }
 
-export const fetchUserEventRegistration = async (eventId, userId) => {
+export const fetchUserRegistrations = async (uid) => {
   try {
-    const q = query(
-      collection(db, REGISTRATIONS_COLLECTION),
-      where("eventId", "==", eventId),
-      where("uid", "==", userId),
-      limit(1)
-    )
-    const snapshot = await getDocs(q)
-    if (snapshot.empty) return null
-    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }
+    const data = await api.get('/registrations/my-tickets')
+    return Array.isArray(data) ? data : []
   } catch (error) {
-    return null
+    console.error('Error fetching user registrations:', error)
+    return []
   }
 }
 
 export const fetchRegistrations = async (eventId) => {
   try {
-    // Try with ordering (requires composite index)
-    const q = query(
-      collection(db, REGISTRATIONS_COLLECTION),
-      where('eventId', '==', eventId),
-      orderBy('registeredAt', 'desc')
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    const data = await api.get(`/registrations/event/${eventId}/attendees`)
+    return Array.isArray(data) ? data : []
   } catch (error) {
-    // Fallback without ordering if composite index doesn't exist yet
-    if (error.code === 'failed-precondition') {
-      console.warn('Composite index missing — fetching without order. Check Firestore console for index link.')
-      const q = query(
-        collection(db, REGISTRATIONS_COLLECTION),
-        where('eventId', '==', eventId)
-      )
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    console.error(`Error fetching attendees for event ${eventId}:`, error)
+    return []
+  }
+}
+
+export const checkUserAttendance = async (eventId, userId) => {
+  try {
+    const data = await api.get(`/events/${eventId}/attendance-status`)
+    return Boolean(data?.attended)
+  } catch (error) {
+    console.error(`Error checking attendance for event ${eventId}:`, error)
+    return false
+  }
+}
+
+export const fetchUserEventRegistration = async (eventId, userId) => {
+  try {
+    const data = await api.get(`/events/${eventId}/attendance-status`)
+    if (data && data.registered) {
+      return {
+        id: data.registrationId,
+        attended: data.attended,
+        attendedAt: data.attendedAt,
+      }
     }
-    throw error
+    return null
+  } catch (error) {
+    console.error(`Error checking user registration for event ${eventId}:`, error)
+    return null
   }
 }
 
 export const markAttendance = async (registrationId) => {
-  const docRef = doc(db, REGISTRATIONS_COLLECTION, registrationId)
-  await updateDoc(docRef, { attended: true, attendedAt: serverTimestamp() })
+  try {
+    return await api.post('/attendance/mark', { registrationId })
+  } catch (error) {
+    console.error(`Error marking attendance for registration ${registrationId}:`, error)
+    throw error
+  }
 }
 
-export const fetchUserRegistrations = async (uid) => {
+/**
+ * True real-time attendance subscription using WebSocket STOMP
+ */
+export const subscribeUserAttendance = (eventId, userId, onChange, onError) => {
+  if (!eventId || !userId) {
+    if (typeof onChange === 'function') onChange(false)
+    return () => {}
+  }
+
+  // 1. Initial status fetch
+  checkUserAttendance(eventId, userId)
+    .then((attended) => {
+      if (typeof onChange === 'function') onChange(attended)
+    })
+    .catch((err) => {
+      if (typeof onError === 'function') onError(err)
+    })
+
+  // 2. Real-time WebSocket STOMP subscription
+  const unsubscribeWs = subscribeToEventAttendance(
+    eventId,
+    (attendanceEvent) => {
+      if (attendanceEvent?.userId === userId || !attendanceEvent?.userId) {
+        if (typeof onChange === 'function') {
+          onChange(attendanceEvent?.attended || true)
+        }
+      }
+    },
+    onError
+  )
+
+  return () => {
+    unsubscribeWs()
+  }
+}
+
+// ==========================================
+// 4. Notifications API
+// ==========================================
+
+export const fetchNotifications = async () => {
   try {
-    const q = query(
-      collection(db, REGISTRATIONS_COLLECTION),
-      where('uid', '==', uid),
-      orderBy('registeredAt', 'desc')
-    )
-    const snapshot = await getDocs(q)
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+    const data = await api.get('/notifications')
+    return Array.isArray(data) ? data : []
   } catch (error) {
-    if (error.code === 'failed-precondition') {
-      const q = query(
-        collection(db, REGISTRATIONS_COLLECTION),
-        where('uid', '==', uid)
-      )
-      const snapshot = await getDocs(q)
-      return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
-    }
+    console.error('Error fetching notifications:', error)
+    return []
+  }
+}
+
+export const markAllNotificationsRead = async () => {
+  try {
+    return await api.patch('/notifications/mark-read')
+  } catch (error) {
+    console.error('Error marking all notifications read:', error)
+    throw error
+  }
+}
+
+export const markNotificationRead = async (id) => {
+  try {
+    return await api.patch(`/notifications/${id}/mark-read`)
+  } catch (error) {
+    console.error(`Error marking notification ${id} read:`, error)
+    throw error
+  }
+}
+
+export const deleteNotification = async (id) => {
+  try {
+    return await api.delete(`/notifications/${id}`)
+  } catch (error) {
+    console.error(`Error deleting notification ${id}:`, error)
     throw error
   }
 }
