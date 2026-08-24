@@ -6,12 +6,12 @@ spring:
     name: clg-events-backend
 
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:mem:clg_events;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
-    username: ${DATABASE_USERNAME:sa}
-    password: ${DATABASE_PASSWORD:}
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: 5
+      minimum-idle: 1
       idle-timeout: 300000
       max-lifetime: 600000
       connection-timeout: 30000
@@ -19,19 +19,13 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+    open-in-view: false
     show-sql: false
-    properties:
-      hibernate:
-        format_sql: false
 
   flyway:
-    enabled: false
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${NEON_AUTH_BASE_URL:https://ep-billowing-bread-azc1ckap.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth}/.well-known/jwks.json
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
 
 # Application Custom Properties
 app:

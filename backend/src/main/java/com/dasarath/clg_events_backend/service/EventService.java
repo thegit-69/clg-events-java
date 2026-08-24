@@ -90,7 +90,11 @@ public class EventService {
         event.setMode(request.mode());
         event.setDescription(request.description().trim());
         event.setVenue(request.venue());
-        event.setBannerUrl(request.banner());
+        String banner = request.banner();
+        if (banner == null || banner.isBlank()) {
+            banner = getDefaultBanner(request.type());
+        }
+        event.setBannerUrl(banner);
         event.setStartDate(request.startDate());
         event.setEndDate(request.endDate());
         event.setRegistrationDeadline(request.registrationDeadline());
@@ -115,6 +119,21 @@ public class EventService {
         );
 
         return toDto(savedEvent);
+    }
+
+    public static String getDefaultBanner(String type) {
+        if (type == null) return "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop";
+        return switch (type.trim().toLowerCase()) {
+            case "hackathon" -> "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&h=400&fit=crop";
+            case "cultural" -> "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=400&fit=crop";
+            case "fest" -> "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&h=400&fit=crop";
+            case "sports" -> "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&h=400&fit=crop";
+            case "technical" -> "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=400&fit=crop";
+            case "workshop" -> "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&h=400&fit=crop";
+            case "seminar" -> "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=800&h=400&fit=crop";
+            case "conference" -> "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop";
+            default -> "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop";
+        };
     }
 
     @Transactional
@@ -211,6 +230,11 @@ public class EventService {
             organizerName = event.getOrganizer().getEmail();
         }
 
+        String bannerUrl = event.getBannerUrl();
+        if (bannerUrl == null || bannerUrl.isBlank()) {
+            bannerUrl = getDefaultBanner(event.getType());
+        }
+
         return new EventResponseDto(
                 event.getId(),
                 event.getTitle(),
@@ -218,7 +242,8 @@ public class EventService {
                 event.getMode(),
                 event.getDescription(),
                 event.getVenue(),
-                event.getBannerUrl(),
+                bannerUrl,
+                bannerUrl,
                 event.getStartDate(),
                 event.getEndDate(),
                 event.getRegistrationDeadline(),

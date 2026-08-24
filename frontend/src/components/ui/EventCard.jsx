@@ -4,9 +4,11 @@ import { IoCalendarOutline, IoLocationOutline, IoPeopleOutline } from 'react-ico
 import Badge from './Badge'
 import Button from './Button'
 import { formatDate } from '../../utils/helpers'
+import { getBannerForEventType } from '../../utils/constants'
 
 export default function EventCard({ event }) {
   const navigate = useNavigate()
+  const bannerSrc = event?.bannerUrl || event?.banner || getBannerForEventType(event?.type)
 
   return (
     <motion.div
@@ -20,8 +22,12 @@ export default function EventCard({ event }) {
       {/* Banner */}
       <div className="relative h-44 overflow-hidden">
         <img
-          src={event.bannerUrl}
+          src={bannerSrc}
           alt={event.title}
+          onError={(e) => {
+            e.target.onerror = null
+            e.target.src = getBannerForEventType(event.type)
+          }}
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />

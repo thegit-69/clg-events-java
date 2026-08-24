@@ -1,5 +1,17 @@
 import api from './api'
 import { subscribeToEventAttendance } from './websocket'
+import { getBannerForEventType } from '../utils/constants'
+
+// Normalizes event objects so bannerUrl and banner are guaranteed to exist
+export const normalizeEvent = (event) => {
+  if (!event || typeof event !== 'object') return event
+  const banner = event.bannerUrl || event.banner || getBannerForEventType(event.type)
+  return {
+    ...event,
+    banner,
+    bannerUrl: banner,
+  }
+}
 
 // ==========================================
 // 1. Events API
@@ -9,10 +21,13 @@ export const fetchApprovedEvents = async (params = {}) => {
   try {
     const data = await api.get('/events', { params })
     // If backend returns Page<EventResponseDto>, extract content
+    let list = []
     if (data && Array.isArray(data.content)) {
-      return data.content
+      list = data.content
+    } else if (Array.isArray(data)) {
+      list = data
     }
-    return Array.isArray(data) ? data : []
+    return list.map(normalizeEvent)
   } catch (error) {
     console.error('Error fetching approved events:', error)
     throw error
@@ -25,7 +40,7 @@ export const fetchEvents = fetchApprovedEvents
 export const fetchEventById = async (id) => {
   try {
     const data = await api.get(`/events/${id}`)
-    return data
+    return data ? normalizeEvent(data) : null
   } catch (error) {
     console.error(`Error fetching event ${id}:`, error)
     return null
@@ -89,7 +104,7 @@ export const deleteEvent = async (id) => {
 export const fetchMyProposals = async (uid) => {
   try {
     const data = await api.get('/events/my-proposals')
-    return Array.isArray(data) ? data : []
+    return Array.isArray(data) ? data.map(normalizeEvent) : []
   } catch (error) {
     console.error('Error fetching proposals:', error)
     return []
@@ -122,7 +137,7 @@ export const resubmitEventProposal = async (eventId) => {
 export const fetchPendingEventsForAdmin = async () => {
   try {
     const data = await api.get('/admin/pending-events')
-    return Array.isArray(data) ? data : []
+    return Array.isArray(data) ? data.map(normalizeEvent) : []
   } catch (error) {
     console.error('Error fetching pending admin events:', error)
     return []

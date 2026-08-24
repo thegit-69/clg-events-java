@@ -1,0 +1,11 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!target/*.jar
+*.class
+.git
+.idea
+*.iml
+.DS_Store
+.env
+clg_events_db.mv.db
+clg_events_db.trace.db

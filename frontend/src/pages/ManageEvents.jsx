@@ -16,7 +16,7 @@ import {
   fetchMyProposals,
   resubmitEventProposal,
 } from '../services/eventService'
-import { APPROVAL_STATUS } from '../utils/constants'
+import { APPROVAL_STATUS, getBannerForEventType } from '../utils/constants'
 import toast from 'react-hot-toast'
 
 export default function ManageEvents() {
@@ -121,8 +121,12 @@ export default function ManageEvents() {
               {/* Thumbnail */}
               <div className="w-full md:w-32 h-20 rounded-lg overflow-hidden flex-shrink-0">
                 <img
-                  src={event.bannerUrl}
+                  src={event.bannerUrl || event.banner || getBannerForEventType(event.type)}
                   alt={event.title}
+                  onError={(e) => {
+                    e.target.onerror = null
+                    e.target.src = getBannerForEventType(event.type)
+                  }}
                   className="w-full h-full object-cover"
                 />
               </div>

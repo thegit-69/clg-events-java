@@ -8,7 +8,7 @@ import {
     fetchPendingEventsForAdmin,
     reviewEventProposal,
 } from '../services/eventService'
-import { APPROVAL_STATUS } from '../utils/constants'
+import { APPROVAL_STATUS, getBannerForEventType } from '../utils/constants'
 import { formatDate } from '../utils/helpers'
 import toast from 'react-hot-toast'
 
@@ -112,8 +112,12 @@ export default function AdminReview() {
                             <div className="flex flex-col lg:flex-row gap-5 lg:items-center">
                                 <div className="w-full lg:w-36 h-24 rounded-lg overflow-hidden flex-shrink-0">
                                     <img
-                                        src={event.bannerUrl}
+                                        src={event.bannerUrl || event.banner || getBannerForEventType(event.type)}
                                         alt={event.title}
+                                        onError={(e) => {
+                                            e.target.onerror = null
+                                            e.target.src = getBannerForEventType(event.type)
+                                        }}
                                         className="w-full h-full object-cover"
                                     />
                                 </div>

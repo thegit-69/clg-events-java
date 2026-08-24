@@ -15,6 +15,7 @@ public record EventResponseDto(
     String description,
     String venue,
     String banner,
+    String bannerUrl,
     Instant startDate,
     Instant endDate,
     Instant registrationDeadline,

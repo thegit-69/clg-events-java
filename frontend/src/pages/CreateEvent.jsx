@@ -10,6 +10,7 @@ import {
   EVENT_MODE,
   EVENT_TYPES,
   THEME_TAGS,
+  getBannerForEventType,
 } from '../utils/constants'
 import { createEvent as createEventApi } from '../services/eventService'
 import toast from 'react-hot-toast'
@@ -23,33 +24,16 @@ export default function CreateEvent() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm()
+
+  const selectedType = watch('type')
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     )
-  }
-
-  const getBannerForEventType = (type) => {
-    switch (type) {
-      case 'Hackathon':
-        return 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&h=400&fit=crop';
-      case 'Cultural':
-        return 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=400&fit=crop';
-      case 'Fest':
-        return 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800&h=400&fit=crop';
-      case 'Sports':
-        return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&h=400&fit=crop';
-      case 'Technical':
-        return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=400&fit=crop';
-      case 'Workshop':
-      case 'Seminar':
-      case 'Conference':
-      default:
-        return 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=400&fit=crop';
-    }
   }
 
   const onSubmit = async (data) => {
@@ -134,6 +118,20 @@ export default function CreateEvent() {
             </select>
             {errors.type && (
               <p className="text-red-500 text-xs mt-1">{errors.type.message}</p>
+            )}
+            {selectedType && (
+              <div className="mt-2.5 relative rounded-xl overflow-hidden h-28 border border-dark-200 shadow-sm">
+                <img
+                  src={getBannerForEventType(selectedType)}
+                  alt={selectedType}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-2.5">
+                  <span className="text-white text-xs font-semibold px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-md">
+                    📸 Category Photo: {selectedType}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
           <div>

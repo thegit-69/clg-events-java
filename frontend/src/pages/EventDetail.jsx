@@ -17,6 +17,7 @@ import CertificateDownload from '../components/ui/CertificateDownload'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import { formatDateLong, formatDateTime } from '../utils/helpers'
+import { getBannerForEventType } from '../utils/constants'
 import {
   fetchEventById,
   fetchUserEventRegistration,
@@ -161,8 +162,12 @@ export default function EventDetail() {
       {/* Banner */}
       <div className="relative h-72 md:h-96 overflow-hidden">
         <img
-          src={event.bannerUrl}
+          src={event?.bannerUrl || event?.banner || getBannerForEventType(event?.type)}
           alt={event.title}
+          onError={(e) => {
+            e.target.onerror = null
+            e.target.src = getBannerForEventType(event?.type)
+          }}
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />

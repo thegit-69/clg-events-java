@@ -9,6 +9,7 @@ import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import AuthModal from '../components/AuthModal'
+import { getBannerForEventType } from '../utils/constants'
 
 const TABS = [
   { label: 'DISCOVER', value: 'all' },
@@ -26,6 +27,9 @@ export default function Home() {
 
   // Featured event (first approved one)
   const featured = filteredEvents[0]
+  const featuredBanner = featured
+    ? featured.bannerUrl || featured.banner || getBannerForEventType(featured.type)
+    : ''
 
   const handleCreateClick = () => {
     if (isAuthenticated) {
@@ -59,8 +63,12 @@ export default function Home() {
             {/* Banner */}
             <div className="relative h-64 lg:h-auto">
               <img
-                src={featured.bannerUrl}
+                src={featuredBanner}
                 alt={featured.title}
+                onError={(e) => {
+                  e.target.onerror = null
+                  e.target.src = getBannerForEventType(featured.type)
+                }}
                 className="w-full h-full object-cover"
               />
             </div>
