@@ -161,7 +161,7 @@ export default function EventDetail() {
       {/* Banner */}
       <div className="relative h-72 md:h-96 overflow-hidden">
         <img
-          src={event.banner}
+          src={event.bannerUrl}
           alt={event.title}
           className="w-full h-full object-cover"
         />
@@ -256,7 +256,7 @@ export default function EventDetail() {
                 Themes
               </h3>
               <div className="flex flex-wrap gap-2">
-                {event.tags.map((tag) => (
+                {(event.tags || []).map((tag) => (
                   <Badge key={tag} color="gray">
                     {tag}
                   </Badge>

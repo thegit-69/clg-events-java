@@ -112,7 +112,7 @@ export default function AdminReview() {
                             <div className="flex flex-col lg:flex-row gap-5 lg:items-center">
                                 <div className="w-full lg:w-36 h-24 rounded-lg overflow-hidden flex-shrink-0">
                                     <img
-                                        src={event.banner}
+                                        src={event.bannerUrl}
                                         alt={event.title}
                                         className="w-full h-full object-cover"
                                     />

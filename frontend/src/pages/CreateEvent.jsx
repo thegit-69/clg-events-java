@@ -11,7 +11,7 @@ import {
   EVENT_TYPES,
   THEME_TAGS,
 } from '../utils/constants'
-import { createEvent as createEventInFirestore } from '../services/eventService'
+import { createEvent as createEventApi } from '../services/eventService'
 import toast from 'react-hot-toast'
 
 export default function CreateEvent() {
@@ -73,12 +73,12 @@ export default function CreateEvent() {
         maxParticipants: data.maxParticipants || 100,
       }
 
-      await createEventInFirestore(eventData)
+      await createEventApi(eventData)
       toast.success('Event submitted for approval!')
       navigate('/dashboard/events')
     } catch (error) {
       console.error('Create event error:', error)
-      toast.error('Failed to create event. Please try again.')
+      toast.error(error.message || 'Failed to create event. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -132,6 +132,9 @@ export default function CreateEvent() {
                 </option>
               ))}
             </select>
+            {errors.type && (
+              <p className="text-red-500 text-xs mt-1">{errors.type.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-dark-700 mb-2">
@@ -148,6 +151,9 @@ export default function CreateEvent() {
                 </option>
               ))}
             </select>
+            {errors.mode && (
+              <p className="text-red-500 text-xs mt-1">{errors.mode.message}</p>
+            )}
           </div>
         </div>
 
@@ -162,6 +168,9 @@ export default function CreateEvent() {
             rows={4}
             className={inputClass}
           />
+          {errors.description && (
+            <p className="text-red-500 text-xs mt-1">{errors.description.message}</p>
+          )}
         </div>
 
         {/* Venue */}
@@ -184,9 +193,12 @@ export default function CreateEvent() {
             </label>
             <input
               type="datetime-local"
-              {...register('startDate', { required: true })}
+              {...register('startDate', { required: 'Start date is required' })}
               className={inputClass}
             />
+            {errors.startDate && (
+              <p className="text-red-500 text-xs mt-1">{errors.startDate.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-dark-700 mb-2">
@@ -194,9 +206,12 @@ export default function CreateEvent() {
             </label>
             <input
               type="datetime-local"
-              {...register('endDate', { required: true })}
+              {...register('endDate', { required: 'End date is required' })}
               className={inputClass}
             />
+            {errors.endDate && (
+              <p className="text-red-500 text-xs mt-1">{errors.endDate.message}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-dark-700 mb-2">

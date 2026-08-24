@@ -20,7 +20,7 @@ export default function EventCard({ event }) {
       {/* Banner */}
       <div className="relative h-44 overflow-hidden">
         <img
-          src={event.banner}
+          src={event.bannerUrl}
           alt={event.title}
           className="w-full h-full object-cover"
         />
@@ -45,7 +45,7 @@ export default function EventCard({ event }) {
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {event.tags.map((tag) => (
+          {(event.tags || []).map((tag) => (
             <Badge key={tag} color="gray">
               {tag}
             </Badge>

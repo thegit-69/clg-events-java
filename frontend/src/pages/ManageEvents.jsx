@@ -121,7 +121,7 @@ export default function ManageEvents() {
               {/* Thumbnail */}
               <div className="w-full md:w-32 h-20 rounded-lg overflow-hidden flex-shrink-0">
                 <img
-                  src={event.banner}
+                  src={event.bannerUrl}
                   alt={event.title}
                   className="w-full h-full object-cover"
                 />

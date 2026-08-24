@@ -1,7 +1,7 @@
 package com.dasarath.clg_events_backend.config;
 
 import com.dasarath.clg_events_backend.dto.common.ErrorResponse;
-import com.dasarath.clg_events_backend.security.NeonJwtAuthenticationConverter;
+import com.dasarath.clg_events_backend.security.UserHeaderAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +16,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,21 +29,19 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final NeonJwtAuthenticationConverter neonJwtAuthenticationConverter;
+    private final UserHeaderAuthenticationFilter userHeaderAuthenticationFilter;
     private final List<String> allowedOrigins;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SecurityConfig(
-            NeonJwtAuthenticationConverter neonJwtAuthenticationConverter,
-            @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000}") String allowedOriginsStr,
-            ObjectMapper objectMapper
+            UserHeaderAuthenticationFilter userHeaderAuthenticationFilter,
+            @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://localhost:5174}") String allowedOriginsStr
     ) {
-        this.neonJwtAuthenticationConverter = neonJwtAuthenticationConverter;
+        this.userHeaderAuthenticationFilter = userHeaderAuthenticationFilter;
         this.allowedOrigins = Arrays.stream(allowedOriginsStr.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
-        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -51,10 +50,13 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Run our header-based auth filter before the anonymous filter so that
+                // authenticated requests are recognised; unauthenticated ones fall through normally.
+                .addFilterBefore(userHeaderAuthenticationFilter, AnonymousAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
-                        .requestMatchers(HttpMethod.GET, "/api/v1/events").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/events/{id}").permitAll()
+                        .requestMatchers("/", "/api/v1", "/api/v1/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/**").permitAll()
                         .requestMatchers("/ws-events/**", "/ws-events").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
@@ -65,9 +67,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().permitAll()
                 )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(neonJwtAuthenticationConverter))
-                )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -75,7 +74,7 @@ public class SecurityConfig {
                             ErrorResponse error = ErrorResponse.of(
                                     HttpStatus.UNAUTHORIZED.value(),
                                     HttpStatus.UNAUTHORIZED.getReasonPhrase(),
-                                    "Authentication required or token expired. " + authException.getMessage(),
+                                    "Authentication required. Please sign in to continue.",
                                     request.getRequestURI()
                             );
                             try {
@@ -105,7 +104,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", "X-User-Id", "X-User-Email", "X-User-Name"));
         configuration.setExposedHeaders(List.of("Authorization", "Link", "X-Total-Count"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

@@ -3,8 +3,8 @@ package com.dasarath.clg_events_backend.service;
 import com.dasarath.clg_events_backend.dto.auth.UserProfileDto;
 import com.dasarath.clg_events_backend.entity.User;
 import com.dasarath.clg_events_backend.enums.Role;
-import com.dasarath.clg_events_backend.exception.ResourceNotFoundException;
 import com.dasarath.clg_events_backend.repository.UserRepository;
+import com.dasarath.clg_events_backend.security.SecurityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -21,10 +21,10 @@ public class UserService {
 
     public UserService(
             UserRepository userRepository,
-            @Value("${app.admin.super-admin-email:admin@example.com}") String superAdminEmail
+            @Value("${app.admin.super-admin-email:cdasarath2006@gmail.com}") String superAdminEmail
     ) {
         this.userRepository = userRepository;
-        this.superAdminEmail = superAdminEmail != null ? superAdminEmail.trim() : "";
+        this.superAdminEmail = superAdminEmail != null ? superAdminEmail.trim() : "cdasarath2006@gmail.com";
     }
 
     /**
@@ -87,16 +87,41 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public User getUserById(String id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+        return userRepository.findById(id).orElseGet(() -> {
+            String email = SecurityUtils.getCurrentUserEmail();
+            if (email == null || email.isBlank()) {
+                email = id + "@campus.edu";
+            }
+            return getOrCreateUser(id, email, email.split("@")[0], null);
+        });
+    }
+
+    @Transactional
+    public User getOrCreateUser(String id, String email, String name, String image) {
+        return userRepository.findById(id).orElseGet(() -> {
+            String resolvedEmail = (email != null && !email.isBlank()) ? email : (id + "@campus.edu");
+            return userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
+                Role role = isSuperAdminEmail(resolvedEmail) ? Role.SUPER_ADMIN : Role.STUDENT;
+                User newUser = new User(
+                        id,
+                        resolvedEmail,
+                        (name != null && !name.isBlank()) ? name : resolvedEmail.split("@")[0],
+                        image,
+                        role
+                );
+                return userRepository.save(newUser);
+            });
+        });
     }
 
     @Transactional(readOnly = true)
     public User getUserByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+        return userRepository.findByEmail(email).orElseGet(() -> {
+            String id = "usr_" + System.currentTimeMillis();
+            return getOrCreateUser(id, email, email.split("@")[0], null);
+        });
     }
 
     @Transactional(readOnly = true)

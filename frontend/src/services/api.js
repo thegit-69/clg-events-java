@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getAuthToken } from './authService'
+import useAuthStore from '../store/authStore'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1'
 
@@ -11,17 +11,35 @@ const api = axios.create({
   withCredentials: true,
 })
 
-// Request Interceptor: Attach Bearer JWT token if available
+// Request Interceptor: Attach User identity headers for authentication
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await getAuthToken()
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`
+      let user = null
+      const savedUserStr = localStorage.getItem('campusevents_user')
+      if (savedUserStr) {
+        try {
+          user = JSON.parse(savedUserStr)
+        } catch (e) {}
       }
-    } catch (err) {
-      console.warn('Failed to attach auth token to request:', err)
+
+      // Fallback to Zustand state if localStorage is empty or invalid
+      if (!user || !user.email) {
+        const storeState = useAuthStore.getState()
+        if (storeState?.user) {
+          user = storeState.user
+        }
+      }
+
+      if (user && user.email) {
+        config.headers['X-User-Id'] = user.uid || user.id || `usr_${user.email.replace(/[^a-zA-Z0-9]/g, '_')}`
+        config.headers['X-User-Email'] = user.email
+        config.headers['X-User-Name'] = user.displayName || user.name || user.email.split('@')[0]
+      }
+    } catch (e) {
+      console.error('Error attaching identity headers:', e)
     }
+
     return config
   },
   (error) => Promise.reject(error)
