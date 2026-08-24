@@ -23,16 +23,16 @@ function App() {
   const { setUser, setLoading } = useAuthStore()
   const { setEvents } = useEventStore()
 
-  // Listen for Firebase auth state changes
+  // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthChange((firebaseUser) => {
-      if (firebaseUser) {
+    const unsubscribe = onAuthChange((user) => {
+      if (user) {
         setUser({
-          uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName,
-          email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL,
-          role: getUserRole(firebaseUser.email),
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          role: getUserRole(user.email),
         })
       } else {
         setUser(null)
