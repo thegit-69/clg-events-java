@@ -1,0 +1,50 @@
+# Root Monorepo Gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# IDE / Editor configuration
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.local
+
+# Frontend specific
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/coverage/
+frontend/*.log
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Backend specific
+backend/target/
+backend/*.class
+backend/*.jar
+backend/*.war
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.log
+backend/application-local.yaml
+backend/application-local.properties
+
+# General logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+PROJECT_STATUS.md

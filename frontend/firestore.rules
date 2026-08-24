@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        // Note: Replaced with environment variable in production
+        && request.auth.token.email == "SUPER_ADMIN_EMAIL@example.com";
+    }
+
+    function eventDocData(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function isEventOwnerData(data) {
+      return isSignedIn()
+        && (
+          (data.createdBy != null && data.createdBy == request.auth.uid)
+          || (data.organizerId != null && data.organizerId == request.auth.uid)
+        );
+    }
+
+    function isEventOwnerById(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId)) 
+             && isEventOwnerData(eventDocData(eventId));
+    }
+
+    function isApprovedEvent(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId))
+        && eventDocData(eventId).approvalStatus == "approved";
+    }
+
+    match /events/{eventId} {
+      allow read: if resource.data.approvalStatus == "approved"
+        || isEventOwnerData(resource.data)
+        || isSuperAdmin();
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.approvalStatus == "pending"
+        && request.resource.data.reviewedBy == null
+        && request.resource.data.reviewedAt == null;
+
+      allow update: if isSuperAdmin()
+        || (
+          isEventOwnerData(resource.data)
+          && (
+            (resource.data.createdBy == null && request.resource.data.createdBy == request.auth.uid)
+            || (resource.data.createdBy != null && request.resource.data.createdBy == resource.data.createdBy)
+          )
+          && (
+            request.resource.data.approvalStatus == resource.data.approvalStatus
+            || (
+              resource.data.approvalStatus == "rejected"
+              && request.resource.data.approvalStatus == "pending"
+            )
+          )
+        );
+
+      allow delete: if isSuperAdmin()
+        || (
+          isEventOwnerData(resource.data)
+          && resource.data.approvalStatus != "approved"
+        );
+    }
+
+    match /registrations/{registrationId} {
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.attended == false
+        && isApprovedEvent(request.resource.data.eventId);
+
+      allow read: if isSuperAdmin()
+        || (isSignedIn() && resource.data.uid == request.auth.uid)
+        || isEventOwnerById(resource.data.eventId);
+
+      allow update: if isSuperAdmin()
+        || (
+          isEventOwnerById(resource.data.eventId)
+          && isApprovedEvent(resource.data.eventId)
+          && resource.data.attended == false
+          && request.resource.data.attended == true
+          && request.resource.data.eventId == resource.data.eventId
+          && request.resource.data.uid == resource.data.uid
+        );
+
+      allow delete: if false;
+    }
+  }
+}
