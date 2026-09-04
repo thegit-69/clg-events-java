@@ -12,6 +12,7 @@ import com.nimbusds.jwt.SignedJWT;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -46,6 +47,7 @@ public class NeonJwtDecoder implements JwtDecoder {
         }
     }
 
+    @Autowired
     public NeonJwtDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:https://ep-billowing-bread-azc1ckap.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth/.well-known/jwks.json}")
             String jwkSetUri

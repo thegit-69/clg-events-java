@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { IoArrowForward, IoAddCircleOutline, IoCalendarOutline } from 'react-icons/io5'
 import { useNavigate, Link } from 'react-router-dom'
@@ -9,7 +9,9 @@ import Button from '../components/ui/Button'
 import useEventStore from '../store/eventStore'
 import useAuthStore from '../store/authStore'
 import AuthModal from '../components/AuthModal'
+import { fetchApprovedEvents } from '../services/eventService'
 import { getBannerForEventType } from '../utils/constants'
+
 
 const TABS = [
   { label: 'DISCOVER', value: 'all' },
