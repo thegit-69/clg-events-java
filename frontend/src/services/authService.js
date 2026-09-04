@@ -48,10 +48,13 @@ export const logOut = async () => {
     cachedToken = null
     cachedTokenExpiry = 0
     localStorage.removeItem('campusevents_user')
+    // Mark intentional logout so the localStorage fallback is skipped on refresh
+    sessionStorage.setItem('campusevents_logged_out', '1')
     await authClient.signOut()
   } catch (error) {
     console.error('Sign out error:', error)
     localStorage.removeItem('campusevents_user')
+    sessionStorage.setItem('campusevents_logged_out', '1')
   }
 }
 
@@ -183,28 +186,16 @@ export const onAuthChange = (callback) => {
           photoURL: rawUser.image || rawUser.photoUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${rawUser.email}`,
           role,
         }
+        // User signed in — clear any previous logout flag
+        sessionStorage.removeItem('campusevents_logged_out')
         localStorage.setItem('campusevents_user', JSON.stringify(user))
         callback(user)
         return
       }
 
-      // 3. Check saved localStorage session
-      const savedUserStr = localStorage.getItem('campusevents_user')
-      if (savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr)
-          if (parsed && parsed.email) {
-            callback(parsed)
-            return
-          }
-        } catch (e) {
-          localStorage.removeItem('campusevents_user')
-        }
-      }
-
-      callback(null)
-    } catch (err) {
-      if (isMounted) {
+      // 3. Check saved localStorage session — but NOT if user explicitly signed out
+      const wasLoggedOut = sessionStorage.getItem('campusevents_logged_out')
+      if (!wasLoggedOut) {
         const savedUserStr = localStorage.getItem('campusevents_user')
         if (savedUserStr) {
           try {
@@ -213,7 +204,28 @@ export const onAuthChange = (callback) => {
               callback(parsed)
               return
             }
-          } catch (e) {}
+          } catch (e) {
+            localStorage.removeItem('campusevents_user')
+          }
+        }
+      }
+
+      callback(null)
+    } catch (err) {
+      if (isMounted) {
+        // Skip localStorage fallback if the user intentionally signed out
+        const wasLoggedOut = sessionStorage.getItem('campusevents_logged_out')
+        if (!wasLoggedOut) {
+          const savedUserStr = localStorage.getItem('campusevents_user')
+          if (savedUserStr) {
+            try {
+              const parsed = JSON.parse(savedUserStr)
+              if (parsed && parsed.email) {
+                callback(parsed)
+                return
+              }
+            } catch (e) {}
+          }
         }
         callback(null)
       }
