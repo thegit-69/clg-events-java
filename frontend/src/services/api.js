@@ -15,19 +15,27 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      let user = null
-      const savedUserStr = localStorage.getItem('campusevents_user')
-      if (savedUserStr) {
-        try {
-          user = JSON.parse(savedUserStr)
-        } catch (e) {}
+      // Skip sending auth headers if the user has explicitly signed out
+      // (prevents stale localStorage from re-authenticating on the backend)
+      if (sessionStorage.getItem('campusevents_logged_out')) {
+        return config
       }
 
-      // Fallback to Zustand state if localStorage is empty or invalid
+      let user = null
+
+      // Priority 1: In-memory Zustand store (always up-to-date, avoids stale localStorage)
+      const storeState = useAuthStore.getState()
+      if (storeState?.user?.email) {
+        user = storeState.user
+      }
+
+      // Priority 2: localStorage fallback (for cases where Zustand hasn't hydrated yet)
       if (!user || !user.email) {
-        const storeState = useAuthStore.getState()
-        if (storeState?.user) {
-          user = storeState.user
+        const savedUserStr = localStorage.getItem('campusevents_user')
+        if (savedUserStr) {
+          try {
+            user = JSON.parse(savedUserStr)
+          } catch (e) {}
         }
       }
 

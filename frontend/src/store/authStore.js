@@ -18,17 +18,19 @@ const useAuthStore = create((set) => ({
   setLoading: (loading) => set({ loading }),
 
   logout: async () => {
-    try {
-      await logOut()
-    } catch (error) {
-      console.error('Logout error:', error)
-    }
+    // Clear Zustand state IMMEDIATELY — this stops api.js from attaching headers
+    // even before the async logOut() call finishes
     set({
       user: null,
       isAuthenticated: false,
       isSuperAdmin: false,
       loading: false,
     })
+    try {
+      await logOut()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
   },
 }))
 
