@@ -110,6 +110,11 @@ export default function EventDetail() {
   const progress = (event.registeredCount / event.maxParticipants) * 100
 
   const handleRegister = async () => {
+    if (registrationId) {
+      toast.error('You are already registered for this event!')
+      return
+    }
+
     if (!canRegisterForEvent) {
       toast.error('You can register only after this event is approved')
       return
@@ -127,7 +132,6 @@ export default function EventDetail() {
 
     setRegistering(true)
     try {
-      // Re-validate against Firestore to match security rules exactly.
       const latestEvent = await fetchEventById(event.id)
       if (!latestEvent || latestEvent.approvalStatus !== APPROVAL_STATUS.APPROVED) {
         toast.error('This event is not approved for registration yet')
@@ -137,16 +141,12 @@ export default function EventDetail() {
       const regId = await registerForEvent(event.id, user)
       setRegistrationId(regId)
       const newCount = (event.registeredCount || 0) + 1
-      // Update in Firestore (best effort)
-      try {
-        await updateEventInFirestore(event.id, { registeredCount: newCount })
-      } catch (e) { /* non-critical */ }
       updateEvent(event.id, { registeredCount: newCount })
       setEvent(prev => ({ ...prev, registeredCount: newCount }))
       toast.success(`Registered for ${event.title}!`)
     } catch (error) {
       console.error('Registration error:', error)
-      toast.error('Registration failed. Please try again.')
+      toast.error(error?.message || 'Registration failed. Please try again.')
     } finally {
       setRegistering(false)
     }

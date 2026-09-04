@@ -63,27 +63,36 @@ public class UserService {
                 user.setRole(Role.SUPER_ADMIN);
             }
             user.setUpdatedAt(Instant.now());
-        } else {
-            // Also check if user exists by email with different ID
-            Optional<User> userByEmailOpt = userRepository.findByEmail(email);
-            if (userByEmailOpt.isPresent()) {
-                user = userByEmailOpt.get();
-                user.setId(userId);
-                if (name != null && !name.isBlank()) {
-                    user.setDisplayName(name);
-                }
-                if (image != null && !image.isBlank()) {
-                    user.setPhotoUrl(image);
-                }
-                if (isSuperAdminEmail(email)) {
-                    user.setRole(Role.SUPER_ADMIN);
-                }
-                user.setUpdatedAt(Instant.now());
-            } else {
-                user = new User(userId, email, name, image, role);
-            }
+            return userRepository.save(user);
         }
 
+        // Check if user exists by email with a different ID (e.g. from initial seed data)
+        Optional<User> userByEmailOpt = userRepository.findByEmail(email);
+        if (userByEmailOpt.isPresent()) {
+            User existing = userByEmailOpt.get();
+            String oldId = existing.getId();
+            if (!oldId.equals(userId)) {
+                // Safely update user ID in database via native SQL to prevent Hibernate identifier mutation error
+                userRepository.updateUserId(oldId, userId);
+                user = userRepository.findById(userId).orElse(new User(userId, email, name, image, role));
+            } else {
+                user = existing;
+            }
+            user.setEmail(email);
+            if (name != null && !name.isBlank()) {
+                user.setDisplayName(name);
+            }
+            if (image != null && !image.isBlank()) {
+                user.setPhotoUrl(image);
+            }
+            if (isSuperAdminEmail(email)) {
+                user.setRole(Role.SUPER_ADMIN);
+            }
+            user.setUpdatedAt(Instant.now());
+            return userRepository.save(user);
+        }
+
+        user = new User(userId, email, name, image, role);
         return userRepository.save(user);
     }
 
@@ -102,7 +111,13 @@ public class UserService {
     public User getOrCreateUser(String id, String email, String name, String image) {
         return userRepository.findById(id).orElseGet(() -> {
             String resolvedEmail = (email != null && !email.isBlank()) ? email : (id + "@campus.edu");
-            return userRepository.findByEmail(resolvedEmail).orElseGet(() -> {
+            return userRepository.findByEmail(resolvedEmail).map(existing -> {
+                if (!existing.getId().equals(id)) {
+                    userRepository.updateUserId(existing.getId(), id);
+                    return userRepository.findById(id).orElse(existing);
+                }
+                return existing;
+            }).orElseGet(() -> {
                 Role role = isSuperAdminEmail(resolvedEmail) ? Role.SUPER_ADMIN : Role.STUDENT;
                 User newUser = new User(
                         id,
