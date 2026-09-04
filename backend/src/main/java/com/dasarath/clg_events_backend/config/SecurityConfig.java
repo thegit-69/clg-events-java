@@ -1,7 +1,7 @@
 package com.dasarath.clg_events_backend.config;
 
 import com.dasarath.clg_events_backend.dto.common.ErrorResponse;
-import com.dasarath.clg_events_backend.security.UserHeaderAuthenticationFilter;
+import com.dasarath.clg_events_backend.security.NeonJwtAuthenticationConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +16,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -29,15 +28,15 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final UserHeaderAuthenticationFilter userHeaderAuthenticationFilter;
+    private final NeonJwtAuthenticationConverter neonJwtAuthenticationConverter;
     private final List<String> allowedOrigins;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SecurityConfig(
-            UserHeaderAuthenticationFilter userHeaderAuthenticationFilter,
+            NeonJwtAuthenticationConverter neonJwtAuthenticationConverter,
             @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://localhost:5174}") String allowedOriginsStr
     ) {
-        this.userHeaderAuthenticationFilter = userHeaderAuthenticationFilter;
+        this.neonJwtAuthenticationConverter = neonJwtAuthenticationConverter;
         this.allowedOrigins = Arrays.stream(allowedOriginsStr.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -50,24 +49,14 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Run our header-based auth filter before the anonymous filter so that
-                // authenticated requests are recognised; unauthenticated ones fall through normally.
-                .addFilterBefore(userHeaderAuthenticationFilter, AnonymousAuthenticationFilter.class)
-                .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
-                        .requestMatchers("/", "/api/v1", "/api/v1/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/**").permitAll()
-                        .requestMatchers("/ws-events/**", "/ws-events").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
-                        // Super Admin only endpoints
-                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
-
-                        // All other API endpoints require authentication
-                        .requestMatchers("/api/v1/**").authenticated()
-                        .anyRequest().permitAll()
-                )
-                .exceptionHandling(exceptions -> exceptions
+                // ── JWT Resource Server ──────────────────────────────────────────────────
+                // Spring Boot auto-fetches Neon Auth's public keys from the JWKS endpoint
+                // configured in application.yaml (spring.security.oauth2.resourceserver.jwt.jwk-set-uri).
+                // The NeonJwtAuthenticationConverter validates the token and syncs the user to DB.
+                // No JWT secret needed — verification uses EdDSA asymmetric public keys.
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(neonJwtAuthenticationConverter))
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -81,6 +70,23 @@ public class SecurityConfig {
                                 response.getOutputStream().write(objectMapper.writeValueAsBytes(error));
                             } catch (Exception ignored) {}
                         })
+                )
+
+                .authorizeHttpRequests(auth -> auth
+                        // Public endpoints
+                        .requestMatchers("/", "/api/v1", "/api/v1/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/**").permitAll()
+                        .requestMatchers("/ws-events/**", "/ws-events").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+
+                        // Super Admin only endpoints
+                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
+
+                        // All other API endpoints require a valid Neon Auth JWT
+                        .requestMatchers("/api/v1/**").authenticated()
+                        .anyRequest().permitAll()
+                )
+                .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -104,7 +110,10 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", "X-User-Id", "X-User-Email", "X-User-Name"));
+        configuration.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "X-Requested-With",
+                "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"
+        ));
         configuration.setExposedHeaders(List.of("Authorization", "Link", "X-Total-Count"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

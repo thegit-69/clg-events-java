@@ -29,7 +29,6 @@ export default function AuthModal({ isOpen, onClose }) {
           photoURL: rawUser.image || rawUser.photoUrl,
           role,
         }
-        localStorage.setItem('campusevents_user', JSON.stringify(user))
         setUser(user)
         toast.success(`Welcome back, ${user.displayName}!`, { id: 'auth-redirect' })
         onClose()

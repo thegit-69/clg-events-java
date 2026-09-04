@@ -2,22 +2,29 @@ import { authClient } from './authClient'
 import { SUPER_ADMIN_EMAIL } from '../utils/constants'
 
 const NEON_AUTH_URL = import.meta.env.VITE_NEON_AUTH_URL || 'https://ep-billowing-bread-azc1ckap.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth'
+
+// ── In-memory JWT cache ───────────────────────────────────────────────────────
+// We store the JWT in module memory, NOT localStorage.
+// - No localStorage = no ghost sessions after logout
+// - On refresh: re-fetched from Neon Auth's /token endpoint using the HttpOnly session cookie
+// - On logout: cachedToken is nulled → api.js sends no Authorization header → 401 from backend
 let cachedToken = null
 let cachedTokenExpiry = 0
 
+// ── Google Sign-In ────────────────────────────────────────────────────────────
 export const signInWithGoogle = async () => {
   try {
     const res = await authClient.signIn.social({
       provider: 'google',
       callbackURL: window.location.origin,
     })
-    
+
     // Better Auth returns { data: { url: '...' }, error: null }
     if (res?.data?.url) {
       window.location.href = res.data.url
       return { redirecting: true, url: res.data.url }
     }
-    
+
     if (res?.error) {
       throw new Error(res.error.message || 'Failed to initialize Google sign in')
     }
@@ -29,47 +36,46 @@ export const signInWithGoogle = async () => {
   }
 }
 
-export const signInWithMockUser = (userData) => {
-  const role = getUserRole(userData.email)
-  const user = {
-    uid: userData.uid || `usr_${Date.now()}`,
-    id: userData.id || userData.uid || `usr_${Date.now()}`,
-    email: userData.email,
-    displayName: userData.displayName || userData.email.split('@')[0],
-    photoURL: userData.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${userData.email}`,
-    role,
-  }
-  localStorage.setItem('campusevents_user', JSON.stringify(user))
-  return user
-}
-
+// ── Logout ────────────────────────────────────────────────────────────────────
 export const logOut = async () => {
   try {
+    // 1. Clear cached JWT immediately — api.js will stop sending Authorization headers
     cachedToken = null
     cachedTokenExpiry = 0
-    localStorage.removeItem('campusevents_user')
-    // Mark intentional logout so the localStorage fallback is skipped on refresh
+    // 2. Mark intentional logout to skip localStorage fallback on next load
     sessionStorage.setItem('campusevents_logged_out', '1')
+    // 3. Remove any persisted user from localStorage
+    localStorage.removeItem('campusevents_user')
+    // 4. Invalidate the Neon Auth session (clears HttpOnly cookie on Neon's domain)
     await authClient.signOut()
   } catch (error) {
     console.error('Sign out error:', error)
+    // Ensure local state is cleared even if Neon Auth signOut fails
     localStorage.removeItem('campusevents_user')
     sessionStorage.setItem('campusevents_logged_out', '1')
   }
 }
 
+// ── JWT Token Retrieval ───────────────────────────────────────────────────────
+// Neon Auth (Better Auth) issues a signed JWT via its /token endpoint.
+// The request uses `credentials: 'include'` to send the HttpOnly session cookie
+// that Neon Auth set after Google OAuth. No JWT secret needed on our end —
+// Spring Boot verifies the JWT's EdDSA signature using Neon Auth's public JWKS keys.
 export const getAuthToken = async () => {
   try {
+    // Skip if user intentionally signed out
+    if (sessionStorage.getItem('campusevents_logged_out')) {
+      return null
+    }
+
     // Return cached token if still valid (>30s remaining)
     if (cachedToken && Date.now() < cachedTokenExpiry - 30_000) {
       return cachedToken
     }
 
-    // better-auth exposes a /token endpoint that returns the JWT.
-    // The client's $fetch proxy calls <baseURL>/token
     let jwt = null
 
-    // Method 1: Try authClient.token() if it exists (some versions expose this)
+    // Method 1: Try authClient.token() — available in some Better Auth versions
     if (typeof authClient.token === 'function') {
       try {
         const result = await authClient.token()
@@ -77,11 +83,11 @@ export const getAuthToken = async () => {
       } catch (_) {}
     }
 
-    // Method 2: Direct fetch to the better-auth /token endpoint (standard route)
+    // Method 2: Direct fetch to Better-Auth /token endpoint using session cookie
     if (!jwt) {
       const res = await fetch(`${NEON_AUTH_URL}/token`, {
         method: 'GET',
-        credentials: 'include',
+        credentials: 'include', // Sends Neon Auth HttpOnly session cookie
         headers: { 'Content-Type': 'application/json' },
       })
       if (res.ok) {
@@ -105,21 +111,8 @@ export const getAuthToken = async () => {
   } catch (e) {
     console.warn('[Auth] Could not retrieve JWT:', e)
   }
-  return cachedToken
-}
 
-export const setAuthToken = (token) => {
-  cachedToken = token
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      cachedTokenExpiry = (payload.exp || 0) * 1000
-    } catch {
-      cachedTokenExpiry = Date.now() + 55 * 60 * 1000
-    }
-  } else {
-    cachedTokenExpiry = 0
-  }
+  return null // Don't return stale token if fetch failed
 }
 
 export const getUserRole = (email) => {
@@ -129,12 +122,16 @@ export const getUserRole = (email) => {
     : 'organizer'
 }
 
+// ── Auth State Listener ───────────────────────────────────────────────────────
+// Checks Neon Auth session on app load.
+// Uses Neon Auth's getSession() which reads the HttpOnly cookie on their domain.
+// On success: pre-warms the JWT cache so first API request is instant.
 export const onAuthChange = (callback) => {
   let isMounted = true
 
   const checkSession = async () => {
     try {
-      // 1. Check for Neon Auth session verifier in URL parameters
+      // 1. Handle Neon Auth OAuth redirect verifier (present after Google callback)
       const urlParams = new URLSearchParams(window.location.search)
       const verifier = urlParams.get('neon_auth_session_verifier')
 
@@ -142,13 +139,10 @@ export const onAuthChange = (callback) => {
 
       if (verifier) {
         try {
-          // Attempt session resolution with verifier query parameter
           const res = await fetch(`${NEON_AUTH_URL}/get-session?neon_auth_session_verifier=${encodeURIComponent(verifier)}`, {
             method: 'GET',
             credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
           })
           if (res.ok) {
             const data = await res.json()
@@ -158,14 +152,14 @@ export const onAuthChange = (callback) => {
           console.warn('Verifier get-session attempt failed:', verErr)
         }
 
-        // Clean query parameter from browser address bar
+        // Clean verifier from URL bar
         urlParams.delete('neon_auth_session_verifier')
         const remainingQuery = urlParams.toString()
         const newUrl = window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '') + window.location.hash
         window.history.replaceState({}, document.title, newUrl)
       }
 
-      // 2. Fallback to standard client getSession
+      // 2. Standard getSession — reads Neon Auth HttpOnly session cookie
       if (!session?.data?.user) {
         try {
           session = await authClient.getSession()
@@ -175,7 +169,7 @@ export const onAuthChange = (callback) => {
       if (!isMounted) return
 
       const rawUser = session?.data?.user || (session?.data?.email ? session.data : null)
-      
+
       if (rawUser) {
         const role = getUserRole(rawUser.email)
         const user = {
@@ -188,34 +182,41 @@ export const onAuthChange = (callback) => {
         }
         // User signed in — clear any previous logout flag
         sessionStorage.removeItem('campusevents_logged_out')
+        // Keep localStorage only as a display cache (not for auth headers anymore)
         localStorage.setItem('campusevents_user', JSON.stringify(user))
+        // Pre-warm the JWT cache so the first API call doesn't wait
+        getAuthToken().catch(() => {})
         callback(user)
         return
       }
 
-      // 3. Check saved localStorage session — but NOT if user explicitly signed out
-      const wasLoggedOut = sessionStorage.getItem('campusevents_logged_out')
-      if (!wasLoggedOut) {
-        const savedUserStr = localStorage.getItem('campusevents_user')
-        if (savedUserStr) {
-          try {
-            const parsed = JSON.parse(savedUserStr)
-            if (parsed && parsed.email) {
-              callback(parsed)
-              return
-            }
-          } catch (e) {
-            localStorage.removeItem('campusevents_user')
+      // 3. If user explicitly logged out, respect that — don't fall back to localStorage
+      if (sessionStorage.getItem('campusevents_logged_out')) {
+        localStorage.removeItem('campusevents_user')
+        callback(null)
+        return
+      }
+
+      // 4. No active Neon Auth session — check localStorage display cache (cold start only)
+      const savedUserStr = localStorage.getItem('campusevents_user')
+      if (savedUserStr) {
+        try {
+          const parsed = JSON.parse(savedUserStr)
+          if (parsed && parsed.email) {
+            // Show cached display info while we verify the session
+            // But we do NOT pre-warm token here — token fetch will confirm if session is real
+            callback(parsed)
+            return
           }
+        } catch (e) {
+          localStorage.removeItem('campusevents_user')
         }
       }
 
       callback(null)
     } catch (err) {
       if (isMounted) {
-        // Skip localStorage fallback if the user intentionally signed out
-        const wasLoggedOut = sessionStorage.getItem('campusevents_logged_out')
-        if (!wasLoggedOut) {
+        if (!sessionStorage.getItem('campusevents_logged_out')) {
           const savedUserStr = localStorage.getItem('campusevents_user')
           if (savedUserStr) {
             try {

@@ -5,6 +5,14 @@ spring:
   application:
     name: clg-events-backend
 
+  # OAuth2 Resource Server — Spring Boot verifies Neon Auth JWTs using their public JWKS keys.
+  # Neon Auth (Better Auth) publishes public keys at /jwks — no secret needed (asymmetric EdDSA).
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${NEON_AUTH_BASE_URL}/jwks
+
   datasource:
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}

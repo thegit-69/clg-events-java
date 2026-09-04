@@ -1,5 +1,5 @@
 import axios from 'axios'
-import useAuthStore from '../store/authStore'
+import { getAuthToken } from './authService'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1'
 
@@ -8,44 +8,26 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true,
+  // No withCredentials needed — we use Authorization header, not cookies
 })
 
-// Request Interceptor: Attach User identity headers for authentication
+// Request Interceptor: Attach Neon Auth JWT as Bearer token
+// Spring Boot verifies this cryptographically via the JWKS endpoint.
+// No X-User-* headers — those were spoofable by anyone.
 api.interceptors.request.use(
   async (config) => {
     try {
-      // Skip sending auth headers if the user has explicitly signed out
-      // (prevents stale localStorage from re-authenticating on the backend)
+      // Skip if user just logged out
       if (sessionStorage.getItem('campusevents_logged_out')) {
         return config
       }
 
-      let user = null
-
-      // Priority 1: In-memory Zustand store (always up-to-date, avoids stale localStorage)
-      const storeState = useAuthStore.getState()
-      if (storeState?.user?.email) {
-        user = storeState.user
-      }
-
-      // Priority 2: localStorage fallback (for cases where Zustand hasn't hydrated yet)
-      if (!user || !user.email) {
-        const savedUserStr = localStorage.getItem('campusevents_user')
-        if (savedUserStr) {
-          try {
-            user = JSON.parse(savedUserStr)
-          } catch (e) {}
-        }
-      }
-
-      if (user && user.email) {
-        config.headers['X-User-Id'] = user.uid || user.id || `usr_${user.email.replace(/[^a-zA-Z0-9]/g, '_')}`
-        config.headers['X-User-Email'] = user.email
-        config.headers['X-User-Name'] = user.displayName || user.name || user.email.split('@')[0]
+      const token = await getAuthToken()
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`
       }
     } catch (e) {
-      console.error('Error attaching identity headers:', e)
+      console.error('Error attaching Authorization header:', e)
     }
 
     return config
