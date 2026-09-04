@@ -24,6 +24,22 @@ export default function Home() {
   const { filteredEvents, searchQuery, setSearchQuery, activeFilter, setActiveFilter } =
     useEventStore()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [loadingEvents, setLoadingEvents] = useState(false)
+
+  // Ensure events are loaded if user lands directly on Home
+  useEffect(() => {
+    if (useEventStore.getState().events.length === 0) {
+      setLoadingEvents(true)
+      fetchApprovedEvents()
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            useEventStore.getState().setEvents(data)
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingEvents(false))
+    }
+  }, [])
 
   // Featured event (first approved one)
   const featured = filteredEvents[0]
@@ -38,6 +54,7 @@ export default function Home() {
       setAuthModalOpen(true)
     }
   }
+
 
   return (
     <div className="min-h-screen pb-16">

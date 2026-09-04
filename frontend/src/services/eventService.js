@@ -27,13 +27,16 @@ export const fetchApprovedEvents = async (params = {}) => {
       list = data.content
     } else if (Array.isArray(data)) {
       list = data
+    } else if (data && typeof data === 'object') {
+      list = data.content || data.items || data.events || data.elements || (data._embedded && Object.values(data._embedded)[0]) || []
     }
-    return list.map(normalizeEvent)
+    return (Array.isArray(list) ? list : []).map(normalizeEvent)
   } catch (error) {
     console.error('Error fetching approved events:', error)
     throw error
   }
 }
+
 
 // Backward-compatible alias
 export const fetchEvents = fetchApprovedEvents

@@ -48,3 +48,6 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 PROJECT_STATUS.md
+.agents
+.claude
+skills-lock.json

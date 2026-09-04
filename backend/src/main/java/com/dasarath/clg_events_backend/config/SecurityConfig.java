@@ -2,6 +2,7 @@ package com.dasarath.clg_events_backend.config;
 
 import com.dasarath.clg_events_backend.dto.common.ErrorResponse;
 import com.dasarath.clg_events_backend.security.NeonJwtAuthenticationConverter;
+import com.dasarath.clg_events_backend.security.NeonJwtDecoder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,14 +29,17 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private final NeonJwtDecoder neonJwtDecoder;
     private final NeonJwtAuthenticationConverter neonJwtAuthenticationConverter;
     private final List<String> allowedOrigins;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SecurityConfig(
+            NeonJwtDecoder neonJwtDecoder,
             NeonJwtAuthenticationConverter neonJwtAuthenticationConverter,
             @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://localhost:5174}") String allowedOriginsStr
     ) {
+        this.neonJwtDecoder = neonJwtDecoder;
         this.neonJwtAuthenticationConverter = neonJwtAuthenticationConverter;
         this.allowedOrigins = Arrays.stream(allowedOriginsStr.split(","))
                 .map(String::trim)
@@ -51,20 +55,22 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // ── JWT Resource Server ──────────────────────────────────────────────────
-                // Spring Boot auto-fetches Neon Auth's public keys from the JWKS endpoint
-                // configured in application.yaml (spring.security.oauth2.resourceserver.jwt.jwk-set-uri).
+                // Spring Boot auto-fetches Neon Auth's public keys from /.well-known/jwks.json.
+                // The custom NeonJwtDecoder supports EdDSA (Ed25519) algorithm used by Neon Auth (Better Auth).
                 // The NeonJwtAuthenticationConverter validates the token and syncs the user to DB.
-                // No JWT secret needed — verification uses EdDSA asymmetric public keys.
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(neonJwtAuthenticationConverter))
+                        .jwt(jwt -> jwt
+                                .decoder(neonJwtDecoder)
+                                .jwtAuthenticationConverter(neonJwtAuthenticationConverter)
+                        )
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             ErrorResponse error = ErrorResponse.of(
-                                    HttpStatus.UNAUTHORIZED.value(),
-                                    HttpStatus.UNAUTHORIZED.getReasonPhrase(),
-                                    "Authentication required. Please sign in to continue.",
-                                    request.getRequestURI()
+                                     HttpStatus.UNAUTHORIZED.value(),
+                                     HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                                     "Authentication required. Please sign in to continue.",
+                                     request.getRequestURI()
                             );
                             try {
                                 response.getOutputStream().write(objectMapper.writeValueAsBytes(error));
@@ -73,11 +79,16 @@ public class SecurityConfig {
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
+                        // Public system endpoints
                         .requestMatchers("/", "/api/v1", "/api/v1/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/**").permitAll()
                         .requestMatchers("/ws-events/**", "/ws-events").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+
+                        // Organizer endpoints under /api/v1/events require authentication
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events/my-proposals", "/api/v1/events/dashboard-stats").authenticated()
+
+                        // Public event discovery and details
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/*").permitAll()
 
                         // Super Admin only endpoints
                         .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
@@ -86,6 +97,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().permitAll()
                 )
+
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);

@@ -50,7 +50,7 @@ function App() {
     return () => unsubscribe()
   }, [setUser, setLoading])
 
-  // ── Load approved events on mount ─────────────────────────────────────────
+  // ── Load approved events on mount & when auth state changes ───────────────
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -58,11 +58,11 @@ function App() {
         setEvents(events)
       } catch (error) {
         console.warn('Approved events fetch failed:', error.message)
-        setEvents([])
       }
     }
     loadEvents()
-  }, [setEvents])
+  }, [setEvents, isAuthenticated])
+
 
   // ── Real-time notifications: WebSocket + polling fallback ─────────────────
   useEffect(() => {

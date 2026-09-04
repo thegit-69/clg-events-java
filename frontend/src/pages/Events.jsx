@@ -1,13 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import SearchBar from '../components/ui/SearchBar'
 import EventCard from '../components/ui/EventCard'
 import useEventStore from '../store/eventStore'
+import { fetchApprovedEvents } from '../services/eventService'
 import { EVENT_TYPES } from '../utils/constants'
 
 export default function Events() {
   const { filteredEvents, searchQuery, setSearchQuery, activeFilter, setActiveFilter } =
     useEventStore()
   const [viewMode, setViewMode] = useState('grid')
+
+  useEffect(() => {
+    if (useEventStore.getState().events.length === 0) {
+      fetchApprovedEvents()
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            useEventStore.getState().setEvents(data)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
+
 
   const filterOptions = ['all', ...EVENT_TYPES.map((t) => t.toLowerCase())]
 

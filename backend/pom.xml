@@ -74,12 +74,20 @@
 			<version>3.1.0</version>
 		</dependency>
 
-		<!-- BouncyCastle: Required for EdDSA (Ed25519) JWT support — Neon Auth uses EdDSA algorithm -->
+		<!-- Google Tink: Required by Nimbus JOSE+JWT for EdDSA (Ed25519) verification — Neon Auth uses EdDSA algorithm -->
+		<dependency>
+			<groupId>com.google.crypto.tink</groupId>
+			<artifactId>tink</artifactId>
+			<version>1.15.0</version>
+		</dependency>
+
+		<!-- BouncyCastle: JCA security provider for cryptographic operations -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
 			<version>1.78.1</version>
 		</dependency>
+
 
 		<!-- Flyway Database Migrations -->
 		<dependency>
