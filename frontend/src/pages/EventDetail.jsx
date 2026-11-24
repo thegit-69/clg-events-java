@@ -294,7 +294,7 @@ export default function EventDetail() {
                   <Badge color={isAttended ? 'green' : 'blue'}>
                     {isAttended ? 'Attendance Marked (Completed)' : 'Registered / Applied'}
                   </Badge>
-                  <Link to="/my-tickets">
+                  <Link to="/dashboard/tickets">
                     <Button size="lg" variant="secondary" icon={<IoTicketOutline />}>
                       View My Ticket
                     </Button>
@@ -332,7 +332,7 @@ export default function EventDetail() {
                   </div>
                   <p className="text-[10px] text-dark-400 font-mono mt-2">{registrationId}</p>
                   <Link
-                    to="/my-tickets"
+                    to="/dashboard/tickets"
                     className="inline-block mt-4 text-sm text-primary-500 font-medium hover:underline"
                   >
                     View all my tickets →

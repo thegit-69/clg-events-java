@@ -5,12 +5,14 @@ import {
   IoAddCircleOutline,
   IoNotificationsOutline,
   IoHomeOutline,
+  IoTicketOutline,
 } from 'react-icons/io5'
 import { HiOutlineAcademicCap } from 'react-icons/hi2'
 import useAuthStore from '../../store/authStore'
 
 const sidebarLinks = [
   { label: 'Overview', path: '/dashboard', icon: <IoGridOutline />, end: true },
+  { label: 'My Tickets', path: '/dashboard/tickets', icon: <IoTicketOutline /> },
   { label: 'My Events', path: '/dashboard/events', icon: <IoCalendarOutline /> },
   { label: 'Create Event', path: '/dashboard/create', icon: <IoAddCircleOutline /> },
   { label: 'Notifications', path: '/dashboard/notifications', icon: <IoNotificationsOutline /> },

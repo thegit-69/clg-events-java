@@ -1,17 +1,36 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useState } from 'react'
-import { IoMenuOutline, IoCloseOutline, IoTicketOutline } from 'react-icons/io5'
+import { useState, useEffect, useRef } from 'react'
+import {
+  IoMenuOutline,
+  IoCloseOutline,
+  IoChevronDownOutline,
+  IoLogOutOutline,
+  IoGridOutline,
+} from 'react-icons/io5'
 import { HiOutlineAcademicCap } from 'react-icons/hi2'
 import Button from '../ui/Button'
 import useAuthStore from '../../store/authStore'
 import AuthModal from '../AuthModal'
+import NotificationBell from '../ui/NotificationBell'
 import { NAV_LINKS } from '../../utils/constants'
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuthStore()
   const [authModal, setAuthModal] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileRef = useRef(null)
   const location = useLocation()
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
     <>
@@ -62,43 +81,64 @@ export default function Navbar() {
             <div className="hidden md:flex items-center gap-3">
               {isAuthenticated ? (
                 <>
-                  <Link to="/my-tickets">
-                    <Button variant="ghost" size="sm" icon={<IoTicketOutline />}>
-                      My Tickets
-                    </Button>
-                  </Link>
+                  <NotificationBell />
                   <Link to="/dashboard">
                     <Button variant="outline" size="sm">
                       Dashboard
                     </Button>
                   </Link>
-                  <div className="flex items-center gap-3 ml-2 pl-4 border-l border-dark-200">
-                    <div className="flex flex-col items-end">
-                      <span className="text-sm font-semibold text-dark-900 leading-tight">
-                        {user?.displayName || 'User'}
-                      </span>
-                      <span className="text-xs text-dark-500 max-w-[120px] truncate leading-tight">
-                        {user?.email}
-                      </span>
-                    </div>
-                    {user?.photoURL ? (
-                      <img
-                        src={user.photoURL}
-                        alt={user.displayName}
-                        className="w-9 h-9 rounded-full object-cover border border-primary-200"
-                        referrerPolicy="no-referrer"
+                  <div className="relative ml-1" ref={profileRef}>
+                    <button
+                      type="button"
+                      onClick={() => setProfileOpen((prev) => !prev)}
+                      aria-label="Open profile menu"
+                      className="flex items-center gap-1.5 rounded-full p-0.5 transition-opacity hover:opacity-80"
+                    >
+                      {user?.photoURL ? (
+                        <img
+                          src={user.photoURL}
+                          alt={user.displayName}
+                          className="w-9 h-9 rounded-full object-cover border border-primary-200"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm border border-primary-200">
+                          {user?.displayName?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <IoChevronDownOutline
+                        size={14}
+                        className={`text-dark-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`}
                       />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm border border-primary-200">
-                        {user?.displayName?.charAt(0) || 'U'}
+                    </button>
+
+                    {profileOpen && (
+                      <div className="absolute right-0 mt-2 w-56 bg-white border border-dark-100 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
+                        <div className="px-4 py-3 border-b border-dark-100">
+                          <p className="text-sm font-semibold text-dark-900 truncate">
+                            {user?.displayName || 'User'}
+                          </p>
+                          <p className="text-xs text-dark-500 truncate">{user?.email}</p>
+                        </div>
+                        <Link
+                          to="/dashboard"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-dark-700 hover:bg-dark-50 transition-colors"
+                        >
+                          <IoGridOutline size={18} /> Dashboard
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProfileOpen(false)
+                            logout()
+                          }}
+                          className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <IoLogOutOutline size={18} /> Sign out
+                        </button>
                       </div>
                     )}
-                    <button
-                      onClick={logout}
-                      className="text-sm font-medium text-dark-500 hover:text-red-600 transition-colors ml-2"
-                    >
-                      Sign out
-                    </button>
                   </div>
                 </>
               ) : (
@@ -128,19 +168,27 @@ export default function Navbar() {
                 Sign in
               </Button>
             ) : (
-              <div className="md:hidden flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80" onClick={() => setMobileMenu(!mobileMenu)}>
-                {user?.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName}
-                    className="w-8 h-8 rounded-full object-cover border border-primary-200"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
-                    {user?.displayName?.charAt(0) || 'U'}
-                  </div>
-                )}
+              <div className="md:hidden flex items-center gap-1">
+                <NotificationBell />
+                <button
+                  type="button"
+                  aria-label="Open profile menu"
+                  className="transition-opacity hover:opacity-80"
+                  onClick={() => setMobileMenu(!mobileMenu)}
+                >
+                  {user?.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName}
+                      className="w-8 h-8 rounded-full object-cover border border-primary-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
+                      {user?.displayName?.charAt(0) || 'U'}
+                    </div>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -185,13 +233,6 @@ export default function Navbar() {
                 {isAuthenticated && (
                   <>
                     <div className="h-px bg-dark-100 my-2" />
-                    <Link
-                      to="/my-tickets"
-                      onClick={() => setMobileMenu(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium text-dark-700 hover:bg-dark-50 hover:text-dark-900 transition-colors"
-                    >
-                      <IoTicketOutline size={20} /> My Tickets
-                    </Link>
                     <Link
                       to="/dashboard"
                       onClick={() => setMobileMenu(false)}

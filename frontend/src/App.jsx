@@ -175,6 +175,7 @@ function App() {
         {/* Dashboard routes with Sidebar */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="tickets" element={<MyTickets />} />
           <Route path="events" element={<ManageEvents />} />
           <Route path="create" element={<CreateEvent />} />
           <Route path="events/:id/attendance" element={<Attendance />} />
