@@ -197,37 +197,12 @@ export const onAuthChange = (callback) => {
         return
       }
 
-      // 4. No active Neon Auth session — check localStorage display cache (cold start only)
-      const savedUserStr = localStorage.getItem('campusevents_user')
-      if (savedUserStr) {
-        try {
-          const parsed = JSON.parse(savedUserStr)
-          if (parsed && parsed.email) {
-            // Show cached display info while we verify the session
-            // But we do NOT pre-warm token here — token fetch will confirm if session is real
-            callback(parsed)
-            return
-          }
-        } catch (e) {
-          localStorage.removeItem('campusevents_user')
-        }
-      }
-
+      // Cached profile data is for display only and must not establish an authenticated session.
+      localStorage.removeItem('campusevents_user')
       callback(null)
     } catch (err) {
       if (isMounted) {
-        if (!sessionStorage.getItem('campusevents_logged_out')) {
-          const savedUserStr = localStorage.getItem('campusevents_user')
-          if (savedUserStr) {
-            try {
-              const parsed = JSON.parse(savedUserStr)
-              if (parsed && parsed.email) {
-                callback(parsed)
-                return
-              }
-            } catch (e) {}
-          }
-        }
+        localStorage.removeItem('campusevents_user')
         callback(null)
       }
     }

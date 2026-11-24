@@ -40,6 +40,27 @@ export const fetchApprovedEvents = async (params = {}) => {
 // Backward-compatible alias
 export const fetchEvents = fetchApprovedEvents
 
+/**
+ * Fetch a single page of approved events with server-side search, type and tag
+ * filtering. Returns the page metadata alongside the normalized content.
+ */
+export const fetchApprovedEventsPage = async (params = {}) => {
+  const data = await api.get('/events', { params })
+  const content = Array.isArray(data?.content)
+    ? data.content
+    : Array.isArray(data)
+      ? data
+      : []
+
+  return {
+    content: content.map(normalizeEvent),
+    totalElements: Number(data?.totalElements ?? content.length),
+    totalPages: Number(data?.totalPages ?? 1),
+    page: Number(data?.number ?? params.page ?? 0),
+    size: Number(data?.size ?? params.size ?? content.length),
+  }
+}
+
 export const fetchEventById = async (id) => {
   try {
     const data = await api.get(`/events/${id}`)

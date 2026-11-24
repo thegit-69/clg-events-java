@@ -31,6 +31,15 @@ const TYPE_CONFIG = {
     bar: 'bg-blue-400',
     label: 'Approved',
   },
+  APPROVED: {
+    icon: <IoCheckmarkDoneOutline />,
+    gradient: 'from-blue-500 to-indigo-500',
+    ring: 'ring-blue-200',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    bar: 'bg-blue-400',
+    label: 'Approved',
+  },
   REJECTED: {
     icon: <IoCloseCircleOutline />,
     gradient: 'from-red-500 to-rose-500',
@@ -57,6 +66,15 @@ const TYPE_CONFIG = {
     text: 'text-amber-700',
     bar: 'bg-amber-400',
     label: 'Reminder',
+  },
+  EVENT: {
+    icon: <IoCalendarOutline />,
+    gradient: 'from-primary-500 to-primary-600',
+    ring: 'ring-primary-200',
+    bg: 'bg-primary-50',
+    text: 'text-primary-700',
+    bar: 'bg-primary-400',
+    label: 'Event',
   },
   DEFAULT: {
     icon: <IoNotificationsOutline />,

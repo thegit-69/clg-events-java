@@ -7,6 +7,7 @@ import {
   IoCalendarOutline,
   IoPersonOutline,
   IoCheckmarkDoneOutline,
+  IoCloseCircleOutline,
 } from 'react-icons/io5'
 import {
   fetchNotifications,
@@ -68,7 +69,13 @@ export default function Notifications() {
       case 'REMINDER':
         return <IoTimeOutline />
       case 'APPROVAL':
+      case 'APPROVED':
         return <IoCheckmarkDoneOutline />
+      case 'REJECTED':
+        return <IoCloseCircleOutline />
+      case 'ATTENDANCE':
+        return <IoCheckmarkCircle />
+      case 'EVENT':
       default:
         return <IoCalendarOutline />
     }

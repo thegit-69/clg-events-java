@@ -99,6 +99,26 @@ public class RegistrationService {
                 NotificationType.REGISTRATION
         );
 
+        // Let the organizer know someone registered (and whether the event is now full)
+        User organizer = event.getOrganizer();
+        if (!organizer.getId().equals(user.getId())) {
+            long newCount = currentCount + 1;
+            boolean isFull = newCount >= event.getMaxParticipants();
+            String title = isFull ? "Event Full: " + event.getTitle() : "New Registration";
+            String message = isFull
+                    ? displayName + " just registered and '" + event.getTitle() + "' is now full ("
+                        + newCount + "/" + event.getMaxParticipants() + ")."
+                    : displayName + " registered for '" + event.getTitle() + "' ("
+                        + newCount + "/" + event.getMaxParticipants() + " spots filled).";
+
+            notificationService.createNotification(
+                    organizer,
+                    title,
+                    message,
+                    NotificationType.REGISTRATION
+            );
+        }
+
         return toTicketDto(savedRegistration);
     }
 
@@ -143,7 +163,34 @@ public class RegistrationService {
             throw new UnauthorizedActionException("You are not authorized to cancel this registration");
         }
 
+        Event event = registration.getEvent();
+        User registrant = registration.getUser();
+        User organizer = event.getOrganizer();
+        String eventTitle = event.getTitle();
+        String displayName = registration.getDisplayName();
+
         registrationRepository.delete(registration);
+
+        // Notify the organizer that a spot opened up
+        if (!organizer.getId().equals(registrant.getId())) {
+            notificationService.createNotification(
+                    organizer,
+                    "Registration Cancelled",
+                    displayName + " cancelled their registration for '" + eventTitle + "'.",
+                    NotificationType.REGISTRATION
+            );
+        }
+
+        // Confirm the cancellation to the registrant
+        boolean cancelledBySelf = registrant.getId().equals(userId);
+        notificationService.createNotification(
+                registrant,
+                "Registration Cancelled",
+                cancelledBySelf
+                        ? "Your registration for '" + eventTitle + "' has been cancelled."
+                        : "Your registration for '" + eventTitle + "' was cancelled by the organizer.",
+                NotificationType.REGISTRATION
+        );
     }
 
     public TicketDto toTicketDto(Registration registration) {

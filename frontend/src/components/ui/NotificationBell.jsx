@@ -6,6 +6,8 @@ import {
   IoCalendarOutline,
   IoPersonOutline,
   IoTimeOutline,
+  IoCloseCircleOutline,
+  IoCheckmarkCircleOutline,
 } from 'react-icons/io5'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -23,7 +25,13 @@ const getIcon = (type) => {
     case 'REMINDER':
       return <IoTimeOutline />
     case 'APPROVAL':
+    case 'APPROVED':
       return <IoCheckmarkDoneOutline />
+    case 'REJECTED':
+      return <IoCloseCircleOutline />
+    case 'ATTENDANCE':
+      return <IoCheckmarkCircleOutline />
+    case 'EVENT':
     default:
       return <IoCalendarOutline />
   }

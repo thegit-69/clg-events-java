@@ -4,5 +4,8 @@ public enum NotificationType {
     REGISTRATION,
     REMINDER,
     EVENT,
-    APPROVAL
+    APPROVAL,
+    APPROVED,
+    REJECTED,
+    ATTENDANCE
 }

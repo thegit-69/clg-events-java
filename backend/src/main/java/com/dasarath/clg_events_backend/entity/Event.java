@@ -77,6 +77,12 @@ public class Event {
     @Column(name = "tag", length = 100)
     private Set<String> tags = new HashSet<>();
 
+    @Column(name = "start_reminder_sent", nullable = false)
+    private boolean startReminderSent = false;
+
+    @Column(name = "deadline_reminder_sent", nullable = false)
+    private boolean deadlineReminderSent = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -154,6 +160,12 @@ public class Event {
 
     public Set<String> getTags() { return tags; }
     public void setTags(Set<String> tags) { this.tags = tags; }
+
+    public boolean isStartReminderSent() { return startReminderSent; }
+    public void setStartReminderSent(boolean startReminderSent) { this.startReminderSent = startReminderSent; }
+
+    public boolean isDeadlineReminderSent() { return deadlineReminderSent; }
+    public void setDeadlineReminderSent(boolean deadlineReminderSent) { this.deadlineReminderSent = deadlineReminderSent; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

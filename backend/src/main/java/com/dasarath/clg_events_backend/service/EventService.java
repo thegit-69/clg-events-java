@@ -5,8 +5,10 @@ import com.dasarath.clg_events_backend.dto.event.DashboardStatsDto;
 import com.dasarath.clg_events_backend.dto.event.EventResponseDto;
 import com.dasarath.clg_events_backend.dto.event.UpdateEventRequest;
 import com.dasarath.clg_events_backend.entity.Event;
+import com.dasarath.clg_events_backend.entity.Registration;
 import com.dasarath.clg_events_backend.entity.User;
 import com.dasarath.clg_events_backend.enums.ApprovalStatus;
+import com.dasarath.clg_events_backend.enums.EventMode;
 import com.dasarath.clg_events_backend.enums.EventStatus;
 import com.dasarath.clg_events_backend.enums.NotificationType;
 import com.dasarath.clg_events_backend.exception.BadRequestException;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -45,21 +48,21 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
-    public Page<EventResponseDto> getApprovedEvents(String search, String type, Pageable pageable) {
-        Page<Event> page;
-
-        boolean hasSearch = search != null && !search.trim().isEmpty();
-        boolean hasType = type != null && !type.trim().isEmpty() && !type.equalsIgnoreCase("all");
-
-        if (hasSearch && hasType) {
-            page = eventRepository.searchApprovedEventsWithType(search.trim(), type.trim(), pageable);
-        } else if (hasSearch) {
-            page = eventRepository.searchApprovedEvents(search.trim(), pageable);
-        } else if (hasType) {
-            page = eventRepository.findByApprovalStatusAndTypeIgnoreCase(ApprovalStatus.APPROVED, type.trim(), pageable);
-        } else {
-            page = eventRepository.findByApprovalStatus(ApprovalStatus.APPROVED, pageable);
+    public Page<EventResponseDto> getApprovedEvents(String search, String type, String tag, Pageable pageable) {
+        String searchTerm = normalizeFilter(search);
+        String typeTerm = normalizeFilter(type);
+        if (typeTerm.equalsIgnoreCase("all")) {
+            typeTerm = "";
         }
+        String tagTerm = normalizeFilter(tag);
+
+        Page<Event> page = eventRepository.searchApprovedEventsFiltered(
+                ApprovalStatus.APPROVED,
+                searchTerm,
+                typeTerm,
+                tagTerm,
+                pageable
+        );
 
         return page.map(this::toDto);
     }
@@ -82,6 +85,8 @@ public class EventService {
 
     @Transactional
     public EventResponseDto createEvent(CreateEventRequest request, String organizerId) {
+        validateEventDates(request.startDate(), request.endDate(), request.registrationDeadline());
+
         User organizer = userService.getUserById(organizerId);
 
         Event event = new Event();
@@ -111,12 +116,20 @@ public class EventService {
 
         Event savedEvent = eventRepository.save(event);
 
-        // Send submission confirmation notification
+        // Send submission confirmation notification to the organizer
         notificationService.createNotification(
                 organizer,
                 "Event Proposal Submitted",
                 "Your event proposal '" + savedEvent.getTitle() + "' has been submitted for admin approval.",
                 NotificationType.EVENT
+        );
+
+        // Let every super admin know there is something new to review
+        notifySuperAdmins(
+                "New Event Proposal Pending Review",
+                organizerDisplayName(organizer) + " submitted '" + savedEvent.getTitle() + "' for approval.",
+                NotificationType.EVENT,
+                organizer.getId()
         );
 
         return toDto(savedEvent);
@@ -147,6 +160,14 @@ public class EventService {
             throw new UnauthorizedActionException("You are not authorized to update this event");
         }
 
+        // Capture the previous values so we can tell registrants what changed
+        String oldTitle = event.getTitle();
+        String oldVenue = event.getVenue();
+        EventMode oldMode = event.getMode();
+        Instant oldStart = event.getStartDate();
+        Instant oldEnd = event.getEndDate();
+        Instant oldDeadline = event.getRegistrationDeadline();
+
         if (request.title() != null && !request.title().isBlank()) event.setTitle(request.title().trim());
         if (request.type() != null && !request.type().isBlank()) event.setType(request.type().trim());
         if (request.mode() != null) event.setMode(request.mode());
@@ -159,7 +180,38 @@ public class EventService {
         if (request.maxParticipants() != null && request.maxParticipants() > 0) event.setMaxParticipants(request.maxParticipants());
         if (request.tags() != null) event.setTags(new HashSet<>(request.tags()));
 
+        // Validate the effective schedule after applying the patch
+        validateEventDates(event.getStartDate(), event.getEndDate(), event.getRegistrationDeadline());
+
+        boolean startChanged = !Objects.equals(oldStart, event.getStartDate());
+        boolean deadlineChanged = !Objects.equals(oldDeadline, event.getRegistrationDeadline());
+
+        // A rescheduled event should be reminded about again
+        if (startChanged) {
+            event.setStartReminderSent(false);
+        }
+        if (deadlineChanged) {
+            event.setDeadlineReminderSent(false);
+        }
+
+        boolean detailsChanged = startChanged
+                || deadlineChanged
+                || !Objects.equals(oldEnd, event.getEndDate())
+                || !Objects.equals(oldTitle, event.getTitle())
+                || !Objects.equals(oldVenue, event.getVenue())
+                || oldMode != event.getMode();
+
         Event updatedEvent = eventRepository.save(event);
+
+        if (detailsChanged) {
+            notifyRegistrants(
+                    updatedEvent,
+                    "Event Updated: " + updatedEvent.getTitle(),
+                    "The details for '" + updatedEvent.getTitle() + "' have changed. Please review the latest schedule, venue, and registration deadline.",
+                    NotificationType.EVENT
+            );
+        }
+
         return toDto(updatedEvent);
     }
 
@@ -173,7 +225,20 @@ public class EventService {
             throw new UnauthorizedActionException("You are not authorized to delete this event");
         }
 
+        String eventTitle = event.getTitle();
+        List<Registration> registrations = registrationRepository.findByEventIdOrderByRegisteredAtDesc(eventId);
+
         eventRepository.delete(event);
+
+        // Tell everyone who registered that the event is gone
+        registrations.forEach(registration ->
+                notificationService.createNotification(
+                        registration.getUser(),
+                        "Event Cancelled: " + eventTitle,
+                        "'" + eventTitle + "' has been cancelled and removed by the organizer.",
+                        NotificationType.EVENT
+                )
+        );
     }
 
     @Transactional
@@ -201,6 +266,13 @@ public class EventService {
                 "Event Proposal Resubmitted",
                 "Your event proposal '" + savedEvent.getTitle() + "' has been resubmitted for admin approval.",
                 NotificationType.EVENT
+        );
+
+        notifySuperAdmins(
+                "Event Proposal Resubmitted",
+                organizerDisplayName(event.getOrganizer()) + " resubmitted '" + savedEvent.getTitle() + "' for approval.",
+                NotificationType.EVENT,
+                event.getOrganizer().getId()
         );
 
         return toDto(savedEvent);
@@ -245,6 +317,49 @@ public class EventService {
             return EventStatus.OPEN;
         }
         return EventStatus.UPCOMING;
+    }
+
+    private void validateEventDates(Instant start, Instant end, Instant deadline) {
+        if (start == null) {
+            throw new BadRequestException("Start date is required");
+        }
+        if (end == null) {
+            throw new BadRequestException("End date is required");
+        }
+        if (!end.isAfter(start)) {
+            throw new BadRequestException("End date must be after the start date");
+        }
+        if (deadline != null && deadline.isAfter(start)) {
+            throw new BadRequestException("Registration deadline must be on or before the event start date");
+        }
+    }
+
+    private void notifySuperAdmins(String title, String message, NotificationType type, String excludeUserId) {
+        userService.getSuperAdmins().stream()
+                .filter(admin -> excludeUserId == null || !admin.getId().equals(excludeUserId))
+                .forEach(admin -> notificationService.createNotification(admin, title, message, type));
+    }
+
+    private void notifyRegistrants(Event event, String title, String message, NotificationType type) {
+        registrationRepository.findByEventIdOrderByRegisteredAtDesc(event.getId())
+                .forEach(registration -> notificationService.createNotification(
+                        registration.getUser(),
+                        title,
+                        message,
+                        type
+                ));
+    }
+
+    private String organizerDisplayName(User organizer) {
+        String name = organizer.getDisplayName();
+        if (name == null || name.isBlank()) {
+            name = organizer.getEmail();
+        }
+        return name;
+    }
+
+    private String normalizeFilter(String value) {
+        return (value == null || value.isBlank()) ? "" : value.trim();
     }
 
     public EventResponseDto toDto(Event event) {

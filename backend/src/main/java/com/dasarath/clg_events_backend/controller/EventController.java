@@ -34,20 +34,27 @@ public class EventController {
     }
 
     @GetMapping
-    @Operation(summary = "Discover approved events", description = "Public endpoint with search, category filtering, and pagination")
+    @Operation(summary = "Discover approved events", description = "Public endpoint with search, category, tag filtering, and pagination")
     public ResponseEntity<ApiResponse<Page<EventResponseDto>>> getEvents(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String tag,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "startDate,asc") String sort
     ) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+
         String[] sortParts = sort.split(",");
         String sortProp = sortParts[0];
+        if (!List.of("startDate", "endDate", "registrationDeadline", "createdAt", "updatedAt", "title", "type", "maxParticipants").contains(sortProp)) {
+            sortProp = "startDate";
+        }
         Sort.Direction direction = sortParts.length > 1 && sortParts[1].equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortProp));
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(direction, sortProp));
 
-        Page<EventResponseDto> events = eventService.getApprovedEvents(search, type, pageable);
+        Page<EventResponseDto> events = eventService.getApprovedEvents(search, type, tag, pageable);
         return ResponseEntity.ok(ApiResponse.success(events));
     }
 

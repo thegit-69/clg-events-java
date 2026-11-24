@@ -53,3 +53,7 @@ PROJECT_STATUS.md
 .claude
 skills-lock.json
 current_status.md
+
+# Generated DB reset/seed dump (contains real user data - do not commit)
+migration.sql
+schema.sql

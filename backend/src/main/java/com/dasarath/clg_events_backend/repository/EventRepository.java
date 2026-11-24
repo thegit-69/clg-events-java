@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,6 +21,64 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
 
     // Filter by type & approval
     Page<Event> findByApprovalStatusAndTypeIgnoreCase(ApprovalStatus approvalStatus, String type, Pageable pageable);
+
+    /**
+     * Single filtered query for public event discovery. Any of the optional
+     * filters may be null, which means "do not filter on this field".
+     */
+    @Query(
+        value = """
+            SELECT e FROM Event e
+            WHERE e.approvalStatus = :approvalStatus
+            AND (
+                :search = ''
+                OR LOWER(e.title) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR LOWER(e.description) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR LOWER(e.venue) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR EXISTS (
+                    SELECT st FROM e.tags st
+                    WHERE LOWER(st) LIKE LOWER(CONCAT('%', :search, '%'))
+                )
+            )
+            AND (:type = '' OR LOWER(e.type) = LOWER(:type))
+            AND (
+                :tag = ''
+                OR EXISTS (
+                    SELECT t FROM e.tags t
+                    WHERE LOWER(t) = LOWER(:tag)
+                )
+            )
+        """,
+        countQuery = """
+            SELECT COUNT(e) FROM Event e
+            WHERE e.approvalStatus = :approvalStatus
+            AND (
+                :search = ''
+                OR LOWER(e.title) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR LOWER(e.description) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR LOWER(e.venue) LIKE LOWER(CONCAT('%', :search, '%'))
+                OR EXISTS (
+                    SELECT st FROM e.tags st
+                    WHERE LOWER(st) LIKE LOWER(CONCAT('%', :search, '%'))
+                )
+            )
+            AND (:type = '' OR LOWER(e.type) = LOWER(:type))
+            AND (
+                :tag = ''
+                OR EXISTS (
+                    SELECT t FROM e.tags t
+                    WHERE LOWER(t) = LOWER(:tag)
+                )
+            )
+        """
+    )
+    Page<Event> searchApprovedEventsFiltered(
+            @Param("approvalStatus") ApprovalStatus approvalStatus,
+            @Param("search") String search,
+            @Param("type") String type,
+            @Param("tag") String tag,
+            Pageable pageable
+    );
 
     // Search by title or tag (approved events)
     @Query("""
@@ -49,6 +108,29 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
         )
     """)
     Page<Event> searchApprovedEventsWithType(@Param("query") String query, @Param("type") String type, Pageable pageable);
+
+    // Reminder scheduler: approved events starting within the given window
+    @Query("""
+        SELECT e FROM Event e
+        WHERE e.approvalStatus = 'APPROVED'
+        AND e.status <> 'CANCELLED'
+        AND e.startReminderSent = false
+        AND e.startDate > :from
+        AND e.startDate <= :to
+    """)
+    List<Event> findEventsNeedingStartReminder(@Param("from") Instant from, @Param("to") Instant to);
+
+    // Reminder scheduler: approved events whose registration deadline falls in the window
+    @Query("""
+        SELECT e FROM Event e
+        WHERE e.approvalStatus = 'APPROVED'
+        AND e.status <> 'CANCELLED'
+        AND e.deadlineReminderSent = false
+        AND e.registrationDeadline IS NOT NULL
+        AND e.registrationDeadline > :from
+        AND e.registrationDeadline <= :to
+    """)
+    List<Event> findEventsNeedingDeadlineReminder(@Param("from") Instant from, @Param("to") Instant to);
 
     // Organizer's proposals
     List<Event> findByOrganizerIdOrderByCreatedAtDesc(String organizerId);

@@ -25,10 +25,27 @@ export default function CreateEvent() {
     register,
     handleSubmit,
     watch,
+    getValues,
     formState: { errors },
   } = useForm()
 
   const selectedType = watch('type')
+
+  const validateEndDate = (value) => {
+    const start = getValues('startDate')
+    if (!value || !start) return true
+    return new Date(value) > new Date(start) || 'End date must be after the start date'
+  }
+
+  const validateRegistrationDeadline = (value) => {
+    if (!value) return true
+    const start = getValues('startDate')
+    if (!start) return true
+    return (
+      new Date(value) <= new Date(start) ||
+      'Registration deadline must be on or before the start date'
+    )
+  }
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>
@@ -37,6 +54,11 @@ export default function CreateEvent() {
   }
 
   const onSubmit = async (data) => {
+    if (!user?.uid) {
+      toast.error('Please sign in again before creating an event.')
+      return
+    }
+
     setSubmitting(true)
     try {
       const eventData = {
@@ -204,7 +226,10 @@ export default function CreateEvent() {
             </label>
             <input
               type="datetime-local"
-              {...register('endDate', { required: 'End date is required' })}
+              {...register('endDate', {
+                required: 'End date is required',
+                validate: validateEndDate,
+              })}
               className={inputClass}
             />
             {errors.endDate && (
@@ -217,9 +242,14 @@ export default function CreateEvent() {
             </label>
             <input
               type="datetime-local"
-              {...register('registrationDeadline')}
+              {...register('registrationDeadline', {
+                validate: validateRegistrationDeadline,
+              })}
               className={inputClass}
             />
+            {errors.registrationDeadline && (
+              <p className="text-red-500 text-xs mt-1">{errors.registrationDeadline.message}</p>
+            )}
           </div>
         </div>
 

@@ -17,6 +17,26 @@ const normalizeEvent = (event) => ({
   tags: Array.isArray(event.tags) ? event.tags : [],
 })
 
+// Apply the current search/filter state to a fresh list of events. Keeping
+// this in one place prevents `filteredEvents` from going stale whenever the
+// underlying `events` array is replaced.
+const applyFilters = (events, searchQuery, activeFilter) => {
+  const safeQuery = (searchQuery || '').toLowerCase()
+  const safeFilter = (activeFilter || 'all').toLowerCase()
+
+  return events.filter((event) => {
+    const matchesFilter =
+      safeFilter === 'all' || (event.type || '').toLowerCase() === safeFilter
+    const matchesSearch =
+      !safeQuery ||
+      (event.title || '').toLowerCase().includes(safeQuery) ||
+      (event.organizer || '').toLowerCase().includes(safeQuery) ||
+      (event.tags || []).some((tag) => (tag || '').toLowerCase().includes(safeQuery))
+
+    return matchesFilter && matchesSearch
+  })
+}
+
 const useEventStore = create((set, get) => ({
   events: [],
   filteredEvents: [],
@@ -27,68 +47,57 @@ const useEventStore = create((set, get) => ({
 
   setEvents: (events) => {
     const normalized = (Array.isArray(events) ? events : []).map(normalizeEvent)
-    set({ events: normalized, filteredEvents: normalized })
+    const { searchQuery, activeFilter } = get()
+    set({
+      events: normalized,
+      filteredEvents: applyFilters(normalized, searchQuery, activeFilter),
+    })
   },
 
   setSelectedEvent: (event) => set({ selectedEvent: event ? normalizeEvent(event) : null }),
 
   setSearchQuery: (query) => {
     const { events, activeFilter } = get()
-    const safeQuery = (query || '').toLowerCase()
-    const filtered = events.filter((e) => {
-      const matchesSearch =
-        (e.title || '').toLowerCase().includes(safeQuery) ||
-        (e.organizer || '').toLowerCase().includes(safeQuery) ||
-        (e.tags || []).some((t) => (t || '').toLowerCase().includes(safeQuery))
-      const matchesFilter =
-        activeFilter === 'all' ||
-        (e.type || '').toLowerCase() === activeFilter.toLowerCase()
-      return matchesSearch && matchesFilter
-    })
-    set({ searchQuery: query, filteredEvents: filtered })
+    set({ searchQuery: query, filteredEvents: applyFilters(events, query, activeFilter) })
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveFilter: (filter) => {
     const { events, searchQuery } = get()
-    const safeQuery = (searchQuery || '').toLowerCase()
-    const filtered = events.filter((e) => {
-      const matchesFilter =
-        filter === 'all' || (e.type || '').toLowerCase() === filter.toLowerCase()
-      const matchesSearch =
-        !safeQuery ||
-        (e.title || '').toLowerCase().includes(safeQuery) ||
-        (e.organizer || '').toLowerCase().includes(safeQuery) ||
-        (e.tags || []).some((t) => (t || '').toLowerCase().includes(safeQuery))
-      return matchesFilter && matchesSearch
-    })
-    set({ activeFilter: filter, filteredEvents: filtered })
+    set({ activeFilter: filter, filteredEvents: applyFilters(events, searchQuery, filter) })
   },
 
   addEvent: (event) => {
     const normalized = normalizeEvent(event)
-    set((state) => ({
-      events: [normalized, ...state.events],
-      filteredEvents: [normalized, ...state.filteredEvents],
-    }))
+    set((state) => {
+      const events = [normalized, ...state.events]
+      return {
+        events,
+        filteredEvents: applyFilters(events, state.searchQuery, state.activeFilter),
+      }
+    })
   },
 
   updateEvent: (id, updates) =>
-    set((state) => ({
-      events: state.events.map((e) =>
-        e.id === id ? { ...e, ...updates } : e
-      ),
-      filteredEvents: state.filteredEvents.map((e) =>
-        e.id === id ? { ...e, ...updates } : e
-      ),
-    })),
+    set((state) => {
+      const events = state.events.map((event) =>
+        event.id === id ? { ...event, ...updates } : event
+      )
+      return {
+        events,
+        filteredEvents: applyFilters(events, state.searchQuery, state.activeFilter),
+      }
+    }),
 
   deleteEvent: (id) =>
-    set((state) => ({
-      events: state.events.filter((e) => e.id !== id),
-      filteredEvents: state.filteredEvents.filter((e) => e.id !== id),
-    })),
+    set((state) => {
+      const events = state.events.filter((event) => event.id !== id)
+      return {
+        events,
+        filteredEvents: applyFilters(events, state.searchQuery, state.activeFilter),
+      }
+    }),
 }))
 
 export default useEventStore

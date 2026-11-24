@@ -77,14 +77,14 @@ public class AdminService {
                     savedEvent.getOrganizer(),
                     "Event Proposal Approved! 🎉",
                     "Congratulations! Your event proposal '" + savedEvent.getTitle() + "' has been approved and published.",
-                    NotificationType.APPROVAL
+                    NotificationType.APPROVED
             );
         } else {
             notificationService.createNotification(
                     savedEvent.getOrganizer(),
                     "Event Proposal Rejected",
                     "Your event proposal '" + savedEvent.getTitle() + "' was rejected. Reason: " + savedEvent.getRejectionReason(),
-                    NotificationType.APPROVAL
+                    NotificationType.REJECTED
             );
         }
 

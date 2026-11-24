@@ -73,7 +73,7 @@ public class AttendanceService {
                     registration.getUser(),
                     "Attendance Confirmed! ✅",
                     "Your attendance for '" + registration.getEvent().getTitle() + "' has been verified. Your certificate is now unlocked!",
-                    NotificationType.REGISTRATION
+                    NotificationType.ATTENDANCE
             );
 
             // Real-time WebSocket broadcast to /topic/events/{eventId}/attendance

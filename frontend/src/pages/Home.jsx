@@ -43,8 +43,24 @@ export default function Home() {
     }
   }, [])
 
-  // Featured event (first approved one)
-  const featured = filteredEvents[0]
+  // Deterministic featured event: the earliest upcoming event, falling back to
+  // the first event when everything has already started.
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    const aTime = a.startDate ? new Date(a.startDate).getTime() : Number.POSITIVE_INFINITY
+    const bTime = b.startDate ? new Date(b.startDate).getTime() : Number.POSITIVE_INFINITY
+    return aTime - bTime
+  })
+  const now = Date.now()
+  const featured =
+    sortedEvents.find((event) => {
+      if (!event.startDate) return false
+      return new Date(event.startDate).getTime() >= now
+    }) || sortedEvents[0]
+
+  const gridEvents = featured
+    ? filteredEvents.filter((event) => event.id !== featured.id)
+    : filteredEvents
+
   const featuredBanner = featured
     ? featured.bannerUrl || featured.banner || getBannerForEventType(featured.type)
     : ''
@@ -103,7 +119,7 @@ export default function Home() {
                 {(featured.tags || []).map((tag) => (
                   <Link
                     key={tag}
-                    to={`/events?tag=${tag}`}
+                    to={`/events?tag=${encodeURIComponent(tag)}`}
                     onClick={(e) => e.stopPropagation()}
                     className="block px-4 py-3 border border-dark-200 rounded-lg text-dark-700
                                font-medium text-center hover:bg-dark-50 transition-colors"
@@ -133,10 +149,15 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredEvents.map((event) => (
+              {gridEvents.map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
             </div>
+            {gridEvents.length === 0 && (
+              <p className="text-sm text-dark-400">
+                That is the only event matching your filters right now.
+              </p>
+            )}
           </>
         ) : (
           <motion.div
