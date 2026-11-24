@@ -25,10 +25,10 @@ import { subscribeToUserNotifications } from './services/websocket'
 function App() {
   const { setUser, setLoading, user, isAuthenticated } = useAuthStore()
   const { setEvents } = useEventStore()
-  const { addToast } = useNotificationStore()
+  const { addToast, mergeNotifications, upsertNotification } = useNotificationStore()
 
-  // Track the most recently seen notification timestamp for polling dedup
-  const lastNotifTimeRef = useRef(null)
+  // Notification IDs already delivered as toasts (dedupes WebSocket vs polling)
+  const seenIdsRef = useRef(new Set())
   // Track WS unsubscribe fn
   const wsUnsubRef = useRef(null)
 
@@ -66,42 +66,45 @@ function App() {
 
   // ── Real-time notifications: WebSocket + polling fallback ─────────────────
   useEffect(() => {
+    const seenIds = seenIdsRef.current
+    seenIds.clear()
+    useNotificationStore.getState().setNotifications([])
+
     if (!isAuthenticated || !user?.uid) return
 
     const userId = user.uid
 
-    // 1. Seed the last-seen timestamp from server so first poll doesn't re-toast old ones
-    const seedLastSeen = async () => {
+    const ingest = (list) => {
+      const safeList = Array.isArray(list) ? list : []
+      return mergeNotifications(safeList)
+    }
+
+    // 1. Seed the shared store and treat existing notifications as already seen
+    const seedNotifications = async () => {
       try {
-        const data = await fetchNotifications()
-        if (Array.isArray(data) && data.length > 0) {
-          const latest = data.reduce((max, n) => {
-            const t = n.createdAt ? new Date(n.createdAt).getTime() : 0
-            return t > max ? t : max
-          }, 0)
-          lastNotifTimeRef.current = latest
-        } else {
-          lastNotifTimeRef.current = Date.now()
-        }
+        const list = ingest(await fetchNotifications())
+        list.forEach((n) => {
+          if (n?.id) seenIds.add(n.id)
+        })
       } catch {
-        lastNotifTimeRef.current = Date.now()
+        // Ignore seed errors
       }
     }
 
-    seedLastSeen()
+    seedNotifications()
 
     // 2. WebSocket STOMP — real-time push
     try {
       const unsub = subscribeToUserNotifications(userId, (notification) => {
-        addToast({
-          title: notification.title || 'New Notification',
-          message: notification.message || '',
-          type: notification.type || 'DEFAULT',
-        })
-        // Advance the last-seen pointer so polling won't duplicate it
-        const t = notification.createdAt ? new Date(notification.createdAt).getTime() : Date.now()
-        if (!lastNotifTimeRef.current || t > lastNotifTimeRef.current) {
-          lastNotifTimeRef.current = t
+        if (!notification?.id) return
+        upsertNotification(notification)
+        if (!seenIds.has(notification.id)) {
+          seenIds.add(notification.id)
+          addToast({
+            title: notification.title || 'New Notification',
+            message: notification.message || '',
+            type: notification.type || 'DEFAULT',
+          })
         }
       })
       wsUnsubRef.current = unsub
@@ -112,32 +115,20 @@ function App() {
     // 3. Polling fallback every 30 seconds (catches cases where WS isn't available)
     const poll = async () => {
       try {
-        const data = await fetchNotifications()
-        if (!Array.isArray(data)) return
+        const list = ingest(await fetchNotifications())
+        const newOnes = list.filter(
+          (n) => n?.id && !n.read && !n.isRead && !seenIds.has(n.id)
+        )
 
-        const newOnes = data.filter((n) => {
-          if (n.read || n.isRead) return false
-          const t = n.createdAt ? new Date(n.createdAt).getTime() : 0
-          return t > (lastNotifTimeRef.current || 0)
+        // Show at most 3 at once from polling to avoid flooding
+        newOnes.slice(0, 3).forEach((n) => {
+          seenIds.add(n.id)
+          addToast({
+            title: n.title || 'New Notification',
+            message: n.message || '',
+            type: n.type || 'DEFAULT',
+          })
         })
-
-        if (newOnes.length > 0) {
-          // Advance pointer before showing toasts to avoid race with WS
-          const maxT = newOnes.reduce((m, n) => {
-            const t = n.createdAt ? new Date(n.createdAt).getTime() : 0
-            return t > m ? t : m
-          }, lastNotifTimeRef.current || 0)
-          lastNotifTimeRef.current = maxT
-
-          // Show at most 3 at once from polling to avoid flooding
-          newOnes.slice(0, 3).forEach((n) =>
-            addToast({
-              title: n.title || 'New Notification',
-              message: n.message || '',
-              type: n.type || 'DEFAULT',
-            })
-          )
-        }
       } catch {
         // Silently ignore poll errors
       }
@@ -152,7 +143,7 @@ function App() {
         wsUnsubRef.current = null
       }
     }
-  }, [isAuthenticated, user?.uid, addToast])
+  }, [isAuthenticated, user?.uid, addToast, mergeNotifications, upsertNotification])
 
   return (
     <BrowserRouter>

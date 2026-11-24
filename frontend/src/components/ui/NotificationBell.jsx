@@ -10,10 +10,11 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import {
   fetchNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
+  markAllNotificationsRead as markAllNotificationsReadApi,
+  markNotificationRead as markNotificationReadApi,
 } from '../../services/eventService'
 import useAuthStore from '../../store/authStore'
+import useNotificationStore from '../../store/notificationStore'
 
 const getIcon = (type) => {
   switch (type) {
@@ -30,8 +31,14 @@ const getIcon = (type) => {
 
 export default function NotificationBell({ align = 'right' }) {
   const { isAuthenticated } = useAuthStore()
+  const {
+    items: notifications,
+    unreadCount,
+    mergeNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useNotificationStore()
   const [open, setOpen] = useState(false)
-  const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
   const containerRef = useRef(null)
 
@@ -40,7 +47,7 @@ export default function NotificationBell({ align = 'right' }) {
     setLoading(true)
     try {
       const data = await fetchNotifications()
-      setNotifications(Array.isArray(data) ? data : [])
+      mergeNotifications(data)
     } finally {
       setLoading(false)
     }
@@ -61,7 +68,6 @@ export default function NotificationBell({ align = 'right' }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const unreadCount = notifications.filter((n) => !n.read && !n.isRead).length
   const recent = notifications.slice(0, 5)
 
   const toggleOpen = () => {
@@ -70,22 +76,20 @@ export default function NotificationBell({ align = 'right' }) {
     if (next) load()
   }
 
-  const markAllRead = async (event) => {
+  const handleMarkAllRead = async (event) => {
     event.stopPropagation()
     try {
-      await markAllNotificationsRead()
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })))
+      await markAllNotificationsReadApi()
+      markAllNotificationsRead()
     } catch (err) {
       console.error('Failed to mark all notifications read:', err)
     }
   }
 
-  const markAsRead = async (id) => {
+  const handleMarkAsRead = async (id) => {
     try {
-      await markNotificationRead(id)
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n))
-      )
+      await markNotificationReadApi(id)
+      markNotificationRead(id)
     } catch (err) {
       console.error(`Failed to mark notification ${id} read:`, err)
     }
@@ -118,7 +122,7 @@ export default function NotificationBell({ align = 'right' }) {
             {unreadCount > 0 && (
               <button
                 type="button"
-                onClick={markAllRead}
+                onClick={handleMarkAllRead}
                 className="text-xs font-medium text-primary-500 hover:text-primary-600"
               >
                 Mark all read
@@ -149,7 +153,7 @@ export default function NotificationBell({ align = 'right' }) {
                   <button
                     type="button"
                     key={notification.id}
-                    onClick={() => markAsRead(notification.id)}
+                    onClick={() => handleMarkAsRead(notification.id)}
                     className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b border-dark-50 last:border-b-0 transition-colors hover:bg-dark-50 ${
                       isRead ? 'bg-white' : 'bg-primary-50/30'
                     }`}

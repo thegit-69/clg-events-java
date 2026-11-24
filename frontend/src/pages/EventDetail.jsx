@@ -87,7 +87,25 @@ export default function EventDetail() {
     isAuthenticated && (ownerUid === user?.uid || isSuperAdmin)
   const isApproved = event?.approvalStatus === APPROVAL_STATUS.APPROVED
   const canViewEvent = !!event && (isApproved || canViewUnapproved)
-  const canRegisterForEvent = isApproved
+
+  const now = Date.now()
+  const startTime = event?.startDate ? new Date(event.startDate).getTime() : null
+  const deadlineTime = event?.registrationDeadline
+    ? new Date(event.registrationDeadline).getTime()
+    : null
+  const hasStarted = startTime != null && now >= startTime
+  const deadlinePassed = deadlineTime != null && now > deadlineTime
+  const isFull = !!event && event.registeredCount >= event.maxParticipants
+  const registrationClosedReason = !isApproved
+    ? 'Registration opens once the event is approved.'
+    : hasStarted
+      ? 'Registration is closed because the event has already started.'
+      : deadlinePassed
+        ? 'Registration is closed because the deadline has passed.'
+        : isFull
+          ? 'Registration is closed because the event is full.'
+          : ''
+  const canRegisterForEvent = isApproved && !hasStarted && !deadlinePassed && !isFull
 
   if (loadingEvent) {
     return (
@@ -116,7 +134,7 @@ export default function EventDetail() {
     }
 
     if (!canRegisterForEvent) {
-      toast.error('You can register only after this event is approved')
+      toast.error(registrationClosedReason || 'Registration is currently closed')
       return
     }
 
@@ -143,7 +161,6 @@ export default function EventDetail() {
       const newCount = (event.registeredCount || 0) + 1
       updateEvent(event.id, { registeredCount: newCount })
       setEvent(prev => ({ ...prev, registeredCount: newCount }))
-      toast.success(`Registered for ${event.title}!`)
     } catch (error) {
       console.error('Registration error:', error)
       toast.error(error?.message || 'Registration failed. Please try again.')
@@ -279,12 +296,15 @@ export default function EventDetail() {
             <div className="border-t border-dark-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <p className="text-sm text-dark-500">
-                  Registration deadline: <span className="font-semibold text-dark-700">{formatDateTime(event.registrationDeadline)}</span>
+                  Registration deadline:{' '}
+                  <span className="font-semibold text-dark-700">
+                    {event.registrationDeadline
+                      ? formatDateTime(event.registrationDeadline)
+                      : 'No deadline'}
+                  </span>
                 </p>
-                {!isApproved && canViewUnapproved && (
-                  <p className="text-xs text-amber-600 mt-2">
-                    This event is {event.approvalStatus}. Public registration is disabled.
-                  </p>
+                {registrationClosedReason && !registrationId && (
+                  <p className="text-xs text-amber-600 mt-2">{registrationClosedReason}</p>
                 )}
               </div>
               {loadingReg ? (
@@ -302,7 +322,11 @@ export default function EventDetail() {
                 </div>
               ) : (
                 <Button size="lg" onClick={handleRegister} disabled={registering || !canRegisterForEvent}>
-                  {registering ? 'Registering...' : 'Register Now'}
+                  {registering
+                    ? 'Registering...'
+                    : canRegisterForEvent
+                      ? 'Register Now'
+                      : 'Registration Closed'}
                 </Button>
               )}
             </div>

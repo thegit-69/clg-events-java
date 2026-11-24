@@ -10,20 +10,27 @@ import {
 } from 'react-icons/io5'
 import {
   fetchNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
+  markAllNotificationsRead as markAllNotificationsReadApi,
+  markNotificationRead as markNotificationReadApi,
 } from '../services/eventService'
+import useNotificationStore from '../store/notificationStore'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState([])
+  const {
+    items: notifications,
+    unreadCount,
+    mergeNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useNotificationStore()
   const [loading, setLoading] = useState(true)
 
   const loadNotifications = async () => {
     try {
       setLoading(true)
       const data = await fetchNotifications()
-      setNotifications(Array.isArray(data) ? data : [])
+      mergeNotifications(data)
     } catch (err) {
       console.error('Failed to load notifications:', err)
     } finally {
@@ -33,14 +40,13 @@ export default function Notifications() {
 
   useEffect(() => {
     loadNotifications()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const unreadCount = notifications.filter((n) => !n.read && !n.isRead).length
 
   const markAllRead = async () => {
     try {
-      await markAllNotificationsRead()
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })))
+      await markAllNotificationsReadApi()
+      markAllNotificationsRead()
     } catch (err) {
       console.error('Failed to mark all notifications read:', err)
     }
@@ -48,10 +54,8 @@ export default function Notifications() {
 
   const markAsRead = async (id) => {
     try {
-      await markNotificationRead(id)
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n))
-      )
+      await markNotificationReadApi(id)
+      markNotificationRead(id)
     } catch (err) {
       console.error(`Failed to mark notification ${id} read:`, err)
     }

@@ -1,7 +1,6 @@
 import api from './api'
 import { subscribeToEventAttendance } from './websocket'
 import { getBannerForEventType } from '../utils/constants'
-import useNotificationStore from '../store/notificationStore'
 
 // Normalizes event objects so bannerUrl and banner are guaranteed to exist
 export const normalizeEvent = (event) => {
@@ -177,12 +176,6 @@ export const registerForEvent = async (eventId, currentUser) => {
       email: currentUser?.email || null,
     }
     const ticket = await api.post(`/events/${eventId}/register`, payload)
-    // Instant success toast
-    useNotificationStore.getState().addToast({
-      title: 'Registration Successful!',
-      message: 'You have been registered for the event. Check My Tickets for your QR code.',
-      type: 'REGISTRATION',
-    })
     return ticket?.id || ticket
   } catch (error) {
     console.error(`Error registering for event ${eventId}:`, error)
@@ -240,12 +233,6 @@ export const fetchUserEventRegistration = async (eventId, userId) => {
 export const markAttendance = async (registrationId) => {
   try {
     const result = await api.post('/attendance/mark', { registrationId })
-    // Instant attendance toast
-    useNotificationStore.getState().addToast({
-      title: 'Attendance Marked!',
-      message: 'Your attendance has been recorded successfully.',
-      type: 'ATTENDANCE',
-    })
     return result
   } catch (error) {
     console.error(`Error marking attendance for registration ${registrationId}:`, error)

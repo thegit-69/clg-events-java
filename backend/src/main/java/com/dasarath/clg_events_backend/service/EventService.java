@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
@@ -223,6 +224,29 @@ public class EventService {
         return new DashboardStatsDto(totalEvents, totalRegistrations, pendingEvents, approvedEvents);
     }
 
+    /**
+     * Derive the status clients should see from the event's dates instead of
+     * relying on a stored flag that is never advanced. Cancellation remains an
+     * explicit organizer/admin decision and is preserved.
+     */
+    private EventStatus computeEffectiveStatus(Event event) {
+        if (event.getStatus() == EventStatus.CANCELLED) {
+            return EventStatus.CANCELLED;
+        }
+
+        Instant now = Instant.now();
+        Instant start = event.getStartDate();
+        Instant end = event.getEndDate();
+
+        if (end != null && now.isAfter(end)) {
+            return EventStatus.COMPLETED;
+        }
+        if (start != null && !now.isBefore(start)) {
+            return EventStatus.OPEN;
+        }
+        return EventStatus.UPCOMING;
+    }
+
     public EventResponseDto toDto(Event event) {
         long registeredCount = registrationRepository.countByEventId(event.getId());
         String organizerName = event.getOrganizer().getDisplayName();
@@ -249,7 +273,7 @@ public class EventService {
                 event.getRegistrationDeadline(),
                 event.getMaxParticipants(),
                 registeredCount,
-                event.getStatus(),
+                computeEffectiveStatus(event),
                 event.getApprovalStatus(),
                 organizerName,
                 event.getOrganizer().getId(),

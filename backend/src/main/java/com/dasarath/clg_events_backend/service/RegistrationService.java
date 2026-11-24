@@ -59,6 +59,10 @@ public class RegistrationService {
             throw new BadRequestException("Registrations are closed for this event");
         }
 
+        if (event.getStartDate() != null && !Instant.now().isBefore(event.getStartDate())) {
+            throw new BadRequestException("Registration is closed because the event has already started");
+        }
+
         if (event.getRegistrationDeadline() != null && Instant.now().isAfter(event.getRegistrationDeadline())) {
             throw new BadRequestException("The registration deadline for this event has passed");
         }
