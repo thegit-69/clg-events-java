@@ -215,13 +215,8 @@ export const fetchUserRegistrations = async (uid) => {
 }
 
 export const fetchRegistrations = async (eventId) => {
-  try {
-    const data = await api.get(`/registrations/event/${eventId}/attendees`)
-    return Array.isArray(data) ? data : []
-  } catch (error) {
-    console.error(`Error fetching attendees for event ${eventId}:`, error)
-    return []
-  }
+  const data = await api.get(`/registrations/event/${eventId}/attendees`)
+  return Array.isArray(data) ? data : []
 }
 
 export const checkUserAttendance = async (eventId, userId) => {

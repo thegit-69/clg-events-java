@@ -1,6 +1,7 @@
 package com.dasarath.clg_events_backend.service;
 
 import com.dasarath.clg_events_backend.dto.registration.AttendeeDto;
+import com.dasarath.clg_events_backend.dto.registration.RegistrationEventDto;
 import com.dasarath.clg_events_backend.dto.registration.RegisterRequest;
 import com.dasarath.clg_events_backend.dto.registration.TicketDto;
 import com.dasarath.clg_events_backend.entity.Event;
@@ -16,8 +17,13 @@ import com.dasarath.clg_events_backend.exception.ResourceNotFoundException;
 import com.dasarath.clg_events_backend.exception.UnauthorizedActionException;
 import com.dasarath.clg_events_backend.repository.EventRepository;
 import com.dasarath.clg_events_backend.repository.RegistrationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,24 +32,29 @@ import java.util.UUID;
 @Service
 public class RegistrationService {
 
+    private static final Logger log = LoggerFactory.getLogger(RegistrationService.class);
+
     private final RegistrationRepository registrationRepository;
     private final EventRepository eventRepository;
     private final UserService userService;
     private final EventService eventService;
     private final NotificationService notificationService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public RegistrationService(
             RegistrationRepository registrationRepository,
             EventRepository eventRepository,
             UserService userService,
             EventService eventService,
-            NotificationService notificationService
+            NotificationService notificationService,
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.registrationRepository = registrationRepository;
         this.eventRepository = eventRepository;
         this.userService = userService;
         this.eventService = eventService;
         this.notificationService = notificationService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -90,6 +101,7 @@ public class RegistrationService {
 
         Registration registration = new Registration(event, user, displayName, email);
         Registration savedRegistration = registrationRepository.save(registration);
+        publishRegistrationCreatedAfterCommit(eventId);
 
         // Confirmation notification
         notificationService.createNotification(
@@ -120,6 +132,28 @@ public class RegistrationService {
         }
 
         return toTicketDto(savedRegistration);
+    }
+
+    private void publishRegistrationCreatedAfterCommit(UUID eventId) {
+        String destination = "/topic/events/" + eventId + "/registrations";
+        Runnable publish = () -> {
+            try {
+                messagingTemplate.convertAndSend(destination, new RegistrationEventDto(eventId));
+            } catch (Exception e) {
+                log.error("Failed to broadcast registration update to {}: {}", destination, e.getMessage());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publish.run();
+                }
+            });
+        } else {
+            publish.run();
+        }
     }
 
     @Transactional(readOnly = true)

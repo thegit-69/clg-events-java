@@ -1,7 +1,16 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'http://localhost:8080/ws-events'
+const apiBaseUrl = new URL(
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
+  window.location.origin
+)
+apiBaseUrl.pathname = apiBaseUrl.pathname.replace(/\/api\/v1\/?$/, '/ws-events')
+apiBaseUrl.search = ''
+apiBaseUrl.hash = ''
+
+const WS_BASE_URL =
+  import.meta.env.VITE_WS_BASE_URL || apiBaseUrl.toString().replace(/\/$/, '')
 
 let stompClient = null
 
@@ -59,6 +68,54 @@ export const subscribeToEventAttendance = (eventId, onAttendanceReceived, onErro
   }
 
   return () => {
+    if (subscription) {
+      try {
+        subscription.unsubscribe()
+      } catch (e) {}
+    }
+  }
+}
+
+export const subscribeToEventRegistrations = (eventId, onRegistrationReceived, onError) => {
+  if (!eventId) return () => {}
+
+  const client = getStompClient()
+  let subscription = null
+  let disposed = false
+
+  const doSubscribe = () => {
+    if (disposed || subscription) return
+    subscription = client.subscribe(`/topic/events/${eventId}/registrations`, (message) => {
+      try {
+        const payload = JSON.parse(message.body)
+        if (typeof onRegistrationReceived === 'function') {
+          onRegistrationReceived(payload)
+        }
+      } catch (err) {
+        console.error('Error parsing registration WebSocket message:', err)
+      }
+    })
+  }
+
+  const prevOnConnect = client.onConnect
+  client.onConnect = (frame) => {
+    if (prevOnConnect) prevOnConnect(frame)
+    subscription = null
+    doSubscribe()
+  }
+  client.onStompError = (frame) => {
+    console.error('STOMP Error (registrations):', frame.headers?.['message'])
+    if (typeof onError === 'function') onError(frame)
+  }
+
+  if (client.connected) {
+    doSubscribe()
+  } else {
+    client.activate()
+  }
+
+  return () => {
+    disposed = true
     if (subscription) {
       try {
         subscription.unsubscribe()

@@ -15,6 +15,7 @@ import {
   fetchRegistrations,
   markAttendance as markAttendanceInFirestore,
 } from '../services/eventService'
+import { subscribeToEventRegistrations } from '../services/websocket'
 import { APPROVAL_STATUS } from '../utils/constants'
 import toast from 'react-hot-toast'
 
@@ -39,6 +40,20 @@ export default function Attendance() {
   const lastScannedTimeRef = useRef(0)
 
   const attendedCount = attendees.filter((a) => a.attended).length
+
+  const refreshAttendees = useCallback(async () => {
+    const regs = await fetchRegistrations(id)
+    return regs.map((r) => ({
+      id: r.id,
+      name: r.displayName || r.name || 'Unknown',
+      email: r.email || '',
+      uid: r.userId || r.uid || '',
+      attended: r.attended || false,
+      time: r.attendedAt?.toDate
+        ? r.attendedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : r.attended ? 'Marked' : null,
+    }))
+  }, [id])
 
   useEffect(() => {
     attendeesRef.current = attendees
@@ -72,18 +87,7 @@ export default function Attendance() {
         setCanManageAttendance(true)
         setEventError('')
 
-        const regs = await fetchRegistrations(id)
-        const mapped = regs.map((r) => ({
-          id: r.id,
-          name: r.displayName || r.name || 'Unknown',
-          email: r.email || '',
-          uid: r.uid || '',
-          attended: r.attended || false,
-          time: r.attendedAt?.toDate
-            ? r.attendedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : r.attended ? 'Marked' : null,
-        }))
-        setAttendees(mapped)
+        setAttendees(await refreshAttendees())
       } catch (error) {
         console.error('Failed to load registrations:', error)
         toast.error('Failed to load attendees')
@@ -92,7 +96,41 @@ export default function Attendance() {
       }
     }
     loadAttendanceData()
-  }, [id, user?.uid, isSuperAdmin])
+  }, [id, user?.uid, isSuperAdmin, refreshAttendees])
+
+  useEffect(() => {
+    if (!id || !canManageAttendance) return
+
+    let active = true
+    const unsubscribe = subscribeToEventRegistrations(
+      id,
+      (registrationEvent) => {
+        if (!active || registrationEvent?.eventId !== id) return
+        refreshAttendees().then((mapped) => {
+          if (active) setAttendees(mapped)
+        }).catch((error) => {
+          if (active) {
+            console.error('Failed to refresh attendee list:', error)
+            toast.error('Could not refresh attendees')
+          }
+        })
+      },
+      (error) => console.error('Attendee registration subscription failed:', error)
+    )
+    const refreshInterval = window.setInterval(() => {
+      refreshAttendees().then((mapped) => {
+        if (active) setAttendees(mapped)
+      }).catch((error) => {
+        console.error('Failed to poll attendee list:', error)
+      })
+    }, 5000)
+
+    return () => {
+      active = false
+      window.clearInterval(refreshInterval)
+      unsubscribe()
+    }
+  }, [id, canManageAttendance, refreshAttendees])
 
   // Mark a registration as attended — uses functional state to avoid stale closures
   const handleMarkAttendance = useCallback(async (registrationId) => {
