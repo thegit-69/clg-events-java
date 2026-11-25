@@ -1,0 +1,28 @@
+name: 🔁 Keep Backend Alive (Render Free Tier)
+
+on:
+  schedule:
+    # Runs every 14 minutes — Render idles at 15 min, so this keeps it warm.
+    # GitHub cron minimum is 5 min; 14 min is a safe, low-traffic choice.
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+jobs:
+  ping:
+    name: Ping Backend Health
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: 🏓 Ping Render backend
+        run: |
+          echo "Pinging backend at $(date)..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 60 \
+            "${{ secrets.RENDER_BACKEND_URL }}/api/v1/health")
+          echo "HTTP Status: $RESPONSE"
+          if [ "$RESPONSE" = "200" ]; then
+            echo "✅ Backend is alive!"
+          else
+            echo "⚠️ Unexpected status: $RESPONSE (might still be waking up)"
+          fi
