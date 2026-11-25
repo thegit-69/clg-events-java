@@ -2,20 +2,37 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    - cron: '*/14 * * * *'
+    # Run every 10 minutes at off-peak minutes (avoids :00/:15/:30/:45 GitHub cron congestion)
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/keep-alive.yml'
 
 jobs:
   ping:
     name: Ping Render Health Endpoint
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
 
     steps:
       - name: Ping backend
+        env:
+          BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL }}
         run: |
-          echo "Pinging at $(date)"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 60 \
-            "${{ secrets.RENDER_BACKEND_URL }}/api/v1/health")
+          if [ -z "$BACKEND_URL" ]; then
+            echo "ERROR: RENDER_BACKEND_URL secret is empty. Add it under Settings -> Secrets and variables -> Actions -> Repository secrets."
+            exit 1
+          fi
+
+          TARGET_URL="${BACKEND_URL%/}/api/v1/health"
+          echo "Pinging health endpoint at $(date -u)"
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 120 --retry 2 --retry-delay 5 "$TARGET_URL")
           echo "HTTP status: $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Unexpected HTTP status: $STATUS"
+            exit 1
+          fi
